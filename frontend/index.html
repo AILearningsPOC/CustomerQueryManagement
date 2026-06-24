@@ -4,267 +4,478 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Customer Query Management — Hisense PoC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
+/* ═══════════════════════════════════════════════════════════════
+   CQM v2 — Enterprise Design System (Salesforce Lightning Inspired)
+   Default: Light Mode
+═══════════════════════════════════════════════════════════════ */
 :root {
-  --bg:       #0f1117;
-  --surface:  #181c24;
-  --card:     #1e2330;
-  --border:   #2a3042;
-  --accent:   #e8502a;
-  --accent2:  #f07d5a;
-  --text:     #e8eaf0;
-  --muted:    #8892a4;
-  --success:  #22c55e;
-  --warning:  #f59e0b;
-  --danger:   #ef4444;
-  --info:     #3b82f6;
-  --radius:   8px;
-  --font:     'Inter', system-ui, sans-serif;
+  /* Brand */
+  --primary:      #0176D3;
+  --primary-dark: #0B5CAB;
+  --primary-light:#E8F4FD;
+  --accent:       #0176D3;
+
+  /* Semantic */
+  --success:      #2E844A;
+  --success-bg:   #EEF6F1;
+  --warning:      #DD7A01;
+  --warning-bg:   #FEF6E6;
+  --danger:       #EA001E;
+  --danger-bg:    #FEE8EA;
+  --info:         #0176D3;
+  --info-bg:      #E8F4FD;
+
+  /* Layout */
+  --bg:           #F4F6F9;
+  --surface:      #FFFFFF;
+  --card:         #FFFFFF;
+  --border:       #D8DDE6;
+  --border-light: #E8ECF2;
+
+  /* Typography */
+  --text:         #181818;
+  --text-secondary:#5F6A7D;
+  --text-muted:   #8896A9;
+
+  /* Elevation */
+  --shadow-xs:    0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-sm:    0 2px 8px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.05);
+  --shadow-md:    0 4px 16px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+  --shadow-lg:    0 8px 32px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.08);
+
+  /* Sizing */
+  --radius-sm:    6px;
+  --radius:       10px;
+  --radius-lg:    14px;
+  --radius-xl:    20px;
+  --topbar-h:     48px;
+  --sidebar-w:    260px;
+  --font:         'Inter', system-ui, sans-serif;
+
+  /* Transitions */
+  --t:            150ms ease;
+  --t-md:         250ms ease;
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}
 
-/* ── LAYOUT ───────────────────────────────────────────────────── */
-#app{display:flex;height:100vh;overflow:hidden}
-#sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
-#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#topbar{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0}
-#content{flex:1;overflow-y:auto;padding:24px}
+/* Dark mode overrides */
+[data-theme="dark"] {
+  --bg:           #0F1117;
+  --surface:      #181C24;
+  --card:         #1E2330;
+  --border:       #2A3042;
+  --border-light: #252D3D;
+  --text:         #E8EAF0;
+  --text-secondary:#8892A4;
+  --text-muted:   #5A6475;
+  --primary-light:#1A2A3E;
+  --success-bg:   #0D2318;
+  --warning-bg:   #2A1E06;
+  --danger-bg:    #2A0A0E;
+  --info-bg:      #0C1E30;
+  --shadow-xs:    0 1px 3px rgba(0,0,0,.3);
+  --shadow-sm:    0 2px 8px rgba(0,0,0,.4);
+  --shadow-md:    0 4px 16px rgba(0,0,0,.5);
+  --shadow-lg:    0 8px 32px rgba(0,0,0,.6);
+}
 
-/* ── SIDEBAR ──────────────────────────────────────────────────── */
-.sidebar-logo{padding:20px 16px;border-bottom:1px solid var(--border)}
-.sidebar-logo .brand{font-size:11px;font-weight:700;letter-spacing:0.12em;color:var(--accent);text-transform:uppercase}
-.sidebar-logo .sub{font-size:12px;color:var(--muted);margin-top:2px}
-.sidebar-logo .hisense{font-size:10px;color:var(--muted);margin-top:4px;opacity:.7}
-nav{flex:1;padding:8px 0;overflow-y:auto}
-.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-radius:0;transition:background .15s;color:var(--muted);font-size:13px;font-weight:500;position:relative;text-decoration:none}
-.nav-item:hover{background:var(--card);color:var(--text)}
-.nav-item.active{background:var(--card);color:var(--text);border-left:3px solid var(--accent)}
-.nav-item .icon{font-size:16px;width:20px;text-align:center}
-.badge{background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:auto}
-.sidebar-bottom{padding:16px;border-top:1px solid var(--border)}
+/* ── RESET ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; font-family: var(--font); font-size: 14px; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+a { text-decoration: none; color: var(--primary); }
+button { font-family: inherit; cursor: pointer; }
 
-/* ── TOPBAR ───────────────────────────────────────────────────── */
-#topbar h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.role-selector{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-.role-selector select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:var(--radius);font-size:12px;cursor:pointer}
-.scraping-controls{display:flex;align-items:center;gap:10px;margin-left:auto}
-.toggle-group{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-.toggle-switch{position:relative;width:36px;height:20px}
-.toggle-switch input{opacity:0;width:0;height:0}
-.toggle-slider{position:absolute;inset:0;background:#374151;border-radius:20px;cursor:pointer;transition:.3s}
-.toggle-slider:before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s}
-.toggle-switch input:checked + .toggle-slider{background:var(--accent)}
-.toggle-switch input:checked + .toggle-slider:before{transform:translateX(16px)}
-.engine-toggle{display:flex;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;font-size:11px}
-.engine-btn{padding:5px 10px;cursor:pointer;color:var(--muted);transition:all .2s;border:none;background:none;font-size:11px;font-weight:600}
-.engine-btn.active{background:var(--accent);color:#fff}
+/* ── LAYOUT ─────────────────────────────────────────────────────── */
+#app { display: flex; height: 100vh; overflow: hidden; }
+#sidebar { width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; transition: width var(--t-md); z-index: 100; }
+#main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+#content { flex: 1; overflow-y: auto; padding: 28px 32px; background: var(--bg); }
 
-/* ── CARDS & PANELS ───────────────────────────────────────────── */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
-.card-title{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:16px}
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
-.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
-.stat-value{font-size:28px;font-weight:700;line-height:1}
-.stat-label{font-size:11px;color:var(--muted);margin-top:4px;font-weight:500}
-.stat-sub{font-size:11px;color:var(--muted);margin-top:6px}
-.stat-card.accent .stat-value{color:var(--accent)}
-.stat-card.success .stat-value{color:var(--success)}
-.stat-card.warning .stat-value{color:var(--warning)}
-.stat-card.danger .stat-value{color:var(--danger)}
-.stat-card.info .stat-value{color:var(--info)}
+/* ── TOPBAR ─────────────────────────────────────────────────────── */
+#topbar {
+  height: var(--topbar-h);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  border-bottom: none; display: flex;
+  align-items: center; padding: 0 24px; gap: 12px;
+  flex-shrink: 0; box-shadow: 0 2px 12px rgba(1,118,211,.3); position: relative; z-index: 50;
+}
+.topbar-logo { display: flex; align-items: center; gap: 10px; margin-right: 8px; }
+.topbar-logo .logo-icon { width: 30px; height: 30px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 11px; letter-spacing: .05em; flex-shrink: 0; }
+.topbar-logo .logo-text { font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; }
+.topbar-logo .logo-sub { font-size: 11px; color: rgba(255,255,255,.7); }
+.topbar-divider { width: 1px; height: 28px; background: rgba(255,255,255,.25); flex-shrink: 0; }
+.topbar-search { flex: 1; max-width: 340px; position: relative; }
+.topbar-search input { width: 100%; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: #fff; padding: 8px 12px 8px 36px; border-radius: var(--radius); font-size: 13px; font-family: inherit; transition: border-color var(--t), box-shadow var(--t); }
+.topbar-search input::placeholder { color: rgba(255,255,255,.6); }
+.topbar-search input:focus { outline: none; border-color: rgba(255,255,255,.6); box-shadow: 0 0 0 3px rgba(255,255,255,.15); background: rgba(255,255,255,.2); }
+.topbar-search .search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,.7); font-size: 13px; pointer-events: none; }
+.topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.topbar-controls { display: flex; align-items: center; gap: 8px; }
+.icon-btn { width: 30px; height: 30px; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.15); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; cursor: pointer; transition: all var(--t); }
+.icon-btn:hover { background: rgba(255,255,255,.25); border-color: rgba(255,255,255,.5); }
+.health-dot { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.8); padding: 5px 10px; border-radius: var(--radius-sm); background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); }
 
-/* ── TABLES ───────────────────────────────────────────────────── */
-.table-wrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse}
-th{text-align:left;padding:10px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);white-space:nowrap}
-td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:13px}
-tr:last-child td{border-bottom:none}
-tr:hover td{background:rgba(255,255,255,.02)}
-.truncate{max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Scraping controls in topbar */
+.scraping-controls { display: flex; align-items: center; gap: 8px; }
+.toggle-group { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.9); white-space: nowrap; }
+.toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 20px; cursor: pointer; transition: var(--t); }
+.toggle-slider:before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: var(--t); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.toggle-switch input:checked + .toggle-slider { background: var(--primary); }
+.toggle-switch input:checked + .toggle-slider:before { transform: translateX(16px); }
+.engine-toggle { display: flex; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); border-radius: var(--radius-sm); overflow: hidden; }
+.engine-btn { padding: 5px 11px; cursor: pointer; color: rgba(255,255,255,.8); transition: all var(--t); border: none; background: none; font-size: 11px; font-weight: 600; font-family: inherit; }
+.engine-btn.active { background: rgba(255,255,255,.9); color: var(--primary-dark); }
+.role-selector { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.85); }
+.role-selector select { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: #fff; padding: 5px 10px; border-radius: var(--radius-sm); font-size: 12px; font-family: inherit; cursor: pointer; }
+.role-selector select option { background: var(--primary-dark); color: #fff; }
 
-/* ── BADGES ───────────────────────────────────────────────────── */
-.badge-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
-.badge-green{background:rgba(34,197,94,.15);color:#4ade80}
-.badge-red{background:rgba(239,68,68,.15);color:#f87171}
-.badge-yellow{background:rgba(245,158,11,.15);color:#fbbf24}
-.badge-blue{background:rgba(59,130,246,.15);color:#60a5fa}
-.badge-purple{background:rgba(168,85,247,.15);color:#c084fc}
-.badge-orange{background:rgba(249,115,22,.15);color:#fb923c}
-.badge-gray{background:rgba(107,114,128,.15);color:#9ca3af}
+/* ── SIDEBAR ─────────────────────────────────────────────────────── */
+.sidebar-header { padding: 20px 16px 16px; border-bottom: 1px solid var(--border-light); }
+.sidebar-brand { font-size: 11px; font-weight: 700; letter-spacing: .1em; color: var(--primary); text-transform: uppercase; }
+.sidebar-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; font-weight: 500; }
+.sidebar-hisense { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+nav { flex: 1; padding: 10px 10px; overflow-y: auto; }
+.nav-section-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; padding: 10px 8px 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; border-radius: var(--radius-sm); transition: all var(--t); color: var(--text-secondary); font-size: 13px; font-weight: 500; position: relative; margin-bottom: 1px; text-decoration: none; }
+.nav-item:hover { background: var(--primary-light); color: var(--primary); }
+.nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+.nav-item.active::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; background: var(--primary); border-radius: 0 3px 3px 0; }
+.nav-item .nav-icon { width: 18px; text-align: center; font-size: 14px; flex-shrink: 0; }
+.nav-badge { background: var(--danger); color: #fff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; margin-left: auto; min-width: 18px; text-align: center; }
+.sidebar-footer { padding: 14px 16px; border-top: 1px solid var(--border-light); }
+.sidebar-footer-info { font-size: 11px; color: var(--text-muted); }
 
-/* ── BUTTONS ──────────────────────────────────────────────────── */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius);font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .2s;white-space:nowrap}
-.btn-primary{background:var(--accent);color:#fff}
-.btn-primary:hover{background:var(--accent2)}
-.btn-secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
-.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
-.btn-success{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
-.btn-success:hover{background:rgba(34,197,94,.25)}
-.btn-danger{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2)}
-.btn-danger:hover{background:rgba(239,68,68,.2)}
-.btn-sm{padding:4px 10px;font-size:11px}
-.btn:disabled{opacity:.4;cursor:not-allowed}
+/* ── PAGE HEADER ─────────────────────────────────────────────────── */
+.page-header { margin-bottom: 24px; }
+.page-header h1 { font-size: 24px; font-weight: 700; color: var(--text); letter-spacing: -.3px; }
+.page-header p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+.breadcrumb span { color: var(--text-muted); }
 
-/* ── FORMS ────────────────────────────────────────────────────── */
-.form-group{margin-bottom:14px}
-.form-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px}
-.form-input,.form-select,.form-textarea{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--radius);font-size:13px;font-family:inherit;transition:border-color .2s}
-.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--accent)}
-.form-textarea{resize:vertical;min-height:80px}
-.form-select{cursor:pointer}
+/* ── CARDS ───────────────────────────────────────────────────────── */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; box-shadow: var(--shadow-xs); transition: box-shadow var(--t-md); margin-bottom: 20px; }
+.card:hover { box-shadow: var(--shadow-sm); }
+.card-title { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+.card-title i { color: var(--primary); }
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px; }
+.card-header-title { font-size: 16px; font-weight: 700; color: var(--text); }
 
-/* ── FILTERS ROW ──────────────────────────────────────────────── */
-.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
-.filters .form-select{width:auto;padding:6px 10px;font-size:12px}
-.filters .form-input{width:220px;padding:6px 10px;font-size:12px}
+/* ── KPI STATS ───────────────────────────────────────────────────── */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-xs); transition: all var(--t-md); position: relative; overflow: hidden; }
+.stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--primary); border-radius: var(--radius-lg) var(--radius-lg) 0 0; opacity: 0; transition: opacity var(--t); }
+.stat-card:hover::before { opacity: 1; }
+.stat-icon { width: 40px; height: 40px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 18px; margin-bottom: 14px; }
+.stat-value { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -.5px; color: var(--text); }
+.stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 5px; font-weight: 500; }
+.stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.stat-card.primary .stat-icon { background: var(--primary-light); color: var(--primary); }
+.stat-card.primary .stat-value { color: var(--primary); }
+.stat-card.success .stat-icon { background: var(--success-bg); color: var(--success); }
+.stat-card.success .stat-value { color: var(--success); }
+.stat-card.warning .stat-icon { background: var(--warning-bg); color: var(--warning); }
+.stat-card.warning .stat-value { color: var(--warning); }
+.stat-card.danger .stat-icon { background: var(--danger-bg); color: var(--danger); }
+.stat-card.danger .stat-value { color: var(--danger); }
+.stat-card.info .stat-icon { background: var(--info-bg); color: var(--info); }
+.stat-card.info .stat-value { color: var(--info); }
 
-/* ── EXPAND PANEL ─────────────────────────────────────────────── */
-.expand-row{display:none}
-.expand-row.open{display:table-row}
-.expand-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:8px 0}
-.expand-panel h4{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase}
+/* ── CHARTS ──────────────────────────────────────────────────────── */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.chart-box { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-xs); }
+.chart-box h3 { font-size: 13px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 16px; }
+canvas { max-height: 220px; }
 
-/* ── CHARTS ───────────────────────────────────────────────────── */
-.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
-.chart-box h3{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
-canvas{max-height:220px}
+/* ── TABLES ──────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; border-radius: var(--radius); }
+table { width: 100%; border-collapse: collapse; }
+thead { position: sticky; top: 0; z-index: 1; }
+th { text-align: left; padding: 11px 14px; font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; background: var(--bg); border-bottom: 2px solid var(--border); white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--border-light); vertical-align: middle; font-size: 13px; color: var(--text); }
+tr:last-child td { border-bottom: none; }
+tbody tr { transition: background var(--t); }
+tbody tr:hover td { background: var(--primary-light); }
+.truncate { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ── AGENT CARDS ──────────────────────────────────────────────── */
-.agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-.agent-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
-.agent-card .agent-name{font-weight:600;margin-bottom:4px}
-.agent-card .agent-role{font-size:11px;color:var(--muted);margin-bottom:10px}
-.agent-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
-.agent-stat{text-align:center}
-.agent-stat .val{font-size:20px;font-weight:700}
-.agent-stat .lbl{font-size:10px;color:var(--muted)}
-.sla-alert{color:var(--danger)}
+/* ── BADGES ──────────────────────────────────────────────────────── */
+.badge-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge-green  { background: var(--success-bg); color: var(--success); border: 1px solid rgba(46,132,74,.2); }
+.badge-red    { background: var(--danger-bg);  color: var(--danger);  border: 1px solid rgba(234,0,30,.2); }
+.badge-yellow { background: var(--warning-bg); color: var(--warning); border: 1px solid rgba(221,122,1,.2); }
+.badge-blue   { background: var(--info-bg);    color: var(--primary); border: 1px solid rgba(1,118,211,.2); }
+.badge-purple { background: #F3EEFF; color: #6B21A8; border: 1px solid rgba(107,33,168,.2); }
+.badge-orange { background: #FEF3E6; color: #C25D00; border: 1px solid rgba(194,93,0,.2); }
+.badge-gray   { background: var(--bg); color: var(--text-secondary); border: 1px solid var(--border); }
+[data-theme="dark"] .badge-purple { background: #2D1A4A; color: #C084FC; }
+[data-theme="dark"] .badge-orange { background: #2A1800; color: #FB923C; }
 
-/* ── UPLOAD ZONE ──────────────────────────────────────────────── */
-.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:border-color .2s}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--accent)}
-.upload-zone p{color:var(--muted);font-size:13px;margin-top:8px}
+/* ── BUTTONS ─────────────────────────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all var(--t); white-space: nowrap; font-family: inherit; letter-spacing: .01em; }
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; box-shadow: 0 2px 6px rgba(1,118,211,.3); }
+.btn-primary:hover { box-shadow: 0 4px 12px rgba(1,118,211,.4); transform: translateY(-1px); }
+.btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow-xs); }
+.btn-secondary:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+.btn-success { background: var(--success-bg); color: var(--success); border: 1px solid rgba(46,132,74,.3); }
+.btn-success:hover { background: var(--success); color: #fff; }
+.btn-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid rgba(234,0,30,.2); }
+.btn-danger:hover { background: var(--danger); color: #fff; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-xs { padding: 4px 9px; font-size: 11px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
 
-/* ── SCRAPE LOG ───────────────────────────────────────────────── */
-.log-entry{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;font-size:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.log-entry .log-time{color:var(--muted);white-space:nowrap}
-.log-entry .log-retailer{font-weight:600}
-.log-entry.has-error{border-color:rgba(239,68,68,.3)}
+/* ── FORMS ───────────────────────────────────────────────────────── */
+.form-group { margin-bottom: 18px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.form-input, .form-select, .form-textarea {
+  width: 100%; background: var(--surface); border: 1.5px solid var(--border);
+  color: var(--text); padding: 9px 13px; border-radius: var(--radius-sm);
+  font-size: 13px; font-family: inherit; transition: border-color var(--t), box-shadow var(--t);
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(1,118,211,.12);
+}
+.form-textarea { resize: vertical; min-height: 90px; }
+.form-select { cursor: pointer; }
+.form-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
 
-/* ── PDF PREVIEW ──────────────────────────────────────────────── */
-.pdf-preview{width:100%;height:500px;border:1px solid var(--border);border-radius:var(--radius);background:#fff}
+/* ── FILTERS ROW ─────────────────────────────────────────────────── */
+.filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; align-items: center; }
+.filters .form-select { width: auto; padding: 7px 11px; font-size: 12px; }
+.filters .form-input { width: 220px; padding: 7px 11px; font-size: 12px; }
 
-/* ── TABS ─────────────────────────────────────────────────────── */
-.tab-bar{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;gap:4px}
-.tab-btn{padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s}
-.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
-.tab-btn:hover{color:var(--text)}
+/* ── SECTION HEADER ──────────────────────────────────────────────── */
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+.section-title { font-size: 20px; font-weight: 700; color: var(--text); }
 
-/* ── MISC ─────────────────────────────────────────────────────── */
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
-.section-title{font-size:16px;font-weight:700}
-.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
-.loading{text-align:center;padding:30px;color:var(--muted)}
-.text-muted{color:var(--muted)}
-.text-success{color:var(--success)}
-.text-danger{color:var(--danger)}
-.text-warning{color:var(--warning)}
-.text-info{color:var(--info)}
-.flex{display:flex}.gap-2{gap:8px}.gap-3{gap:12px}.items-center{align-items:center}
-.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);padding:12px 18px;border-radius:var(--radius);font-size:13px;z-index:9999;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(100px);opacity:0;transition:all .3s}
-.toast.show{transform:translateY(0);opacity:1}
-.toast.success{border-color:var(--success);color:var(--success)}
-.toast.error{border-color:var(--danger);color:var(--danger)}
-.pagination{display:flex;gap:6px;align-items:center;margin-top:16px;justify-content:flex-end}
-.page-btn{padding:5px 10px;border-radius:var(--radius);font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text)}
-.page-btn.active{background:var(--accent);border-color:var(--accent)}
-.page-btn:disabled{opacity:.4;cursor:not-allowed}
-.confidence-bar{height:4px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden}
-.confidence-fill{height:100%;border-radius:2px;transition:width .3s}
+/* ── EXPAND PANEL ────────────────────────────────────────────────── */
+.expand-row { display: none; }
+.expand-row.open { display: table-row; }
+.expand-panel { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin: 8px 0; }
+.expand-panel h4 { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+
+/* ── AGENT CARDS ─────────────────────────────────────────────────── */
+.agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+.agent-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; box-shadow: var(--shadow-xs); transition: all var(--t-md); }
+.agent-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.agent-avatar { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 12px; }
+.agent-name { font-weight: 700; font-size: 15px; margin-bottom: 3px; }
+.agent-role { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+.agent-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border-light); }
+.agent-stat { text-align: center; }
+.agent-stat .val { font-size: 22px; font-weight: 800; color: var(--text); }
+.agent-stat .lbl { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.sla-alert { color: var(--danger) !important; }
+
+/* ── UPLOAD ZONE ─────────────────────────────────────────────────── */
+.upload-zone { border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 40px 24px; text-align: center; cursor: pointer; transition: all var(--t-md); background: var(--bg); }
+.upload-zone:hover, .upload-zone.drag { border-color: var(--primary); background: var(--primary-light); }
+.upload-zone .upload-icon { font-size: 40px; color: var(--primary); margin-bottom: 12px; }
+.upload-zone p { color: var(--text-secondary); font-size: 14px; font-weight: 500; }
+.upload-zone .upload-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+/* ── SCRAPE LOGS ─────────────────────────────────────────────────── */
+.log-entry { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 8px; font-size: 12px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; box-shadow: var(--shadow-xs); transition: box-shadow var(--t); }
+.log-entry:hover { box-shadow: var(--shadow-sm); }
+.log-entry.has-error { border-color: rgba(234,0,30,.3); background: var(--danger-bg); }
+.log-time { color: var(--text-muted); white-space: nowrap; font-size: 11px; }
+
+/* ── PDF PREVIEW ─────────────────────────────────────────────────── */
+.pdf-preview { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: var(--radius); background: #fff; }
+
+/* ── INNER TABS ──────────────────────────────────────────────────── */
+.tab-bar { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 24px; gap: 0; }
+.tab-btn { padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; background: none; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all var(--t); font-family: inherit; }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab-btn:hover { color: var(--text); }
+
+/* ── TOAST ───────────────────────────────────────────────────────── */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--card); border: 1px solid var(--border); padding: 13px 20px; border-radius: var(--radius); font-size: 13px; z-index: 9999; max-width: 340px; box-shadow: var(--shadow-lg); transform: translateY(100px); opacity: 0; transition: all .3s cubic-bezier(.34,1.56,.64,1); display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.toast.show { transform: translateY(0); opacity: 1; }
+.toast.success { border-left: 4px solid var(--success); }
+.toast.error { border-left: 4px solid var(--danger); }
+.toast.info { border-left: 4px solid var(--primary); }
+
+/* ── PAGINATION ──────────────────────────────────────────────────── */
+.pagination { display: flex; gap: 6px; align-items: center; margin-top: 18px; justify-content: flex-end; }
+.page-btn { padding: 6px 12px; border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--card); color: var(--text); transition: all var(--t); font-weight: 500; font-family: inherit; }
+.page-btn:hover { border-color: var(--primary); color: var(--primary); }
+.page-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.page-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── CONFIDENCE BAR ──────────────────────────────────────────────── */
+.confidence-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.confidence-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+
+/* ── EMPTY STATE ─────────────────────────────────────────────────── */
+.empty { text-align: center; padding: 56px 24px; }
+.empty-icon { font-size: 48px; color: var(--border); margin-bottom: 16px; }
+.empty-title { font-size: 16px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; }
+.empty-sub { font-size: 13px; color: var(--text-muted); max-width: 360px; margin: 0 auto 20px; line-height: 1.6; }
+
+/* ── SKELETON LOADING ────────────────────────────────────────────── */
+.skeleton { background: linear-gradient(90deg, var(--border-light) 25%, var(--border) 50%, var(--border-light) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: var(--radius-sm); }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-row { display: flex; gap: 12px; padding: 14px; border-bottom: 1px solid var(--border-light); }
+.skeleton-row .sk-cell { height: 14px; border-radius: 4px; }
+
+/* ── WELCOME BANNER ──────────────────────────────────────────────── */
+.welcome-banner { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); border-radius: var(--radius-lg); padding: 24px 28px; color: #fff; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; box-shadow: 0 4px 20px rgba(1,118,211,.3); }
+.welcome-text h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+.welcome-text p { font-size: 13px; opacity: .85; }
+.welcome-actions { display: flex; gap: 10px; flex-shrink: 0; }
+.btn-white { background: rgba(255,255,255,.2); color: #fff; border: 1px solid rgba(255,255,255,.3); backdrop-filter: blur(4px); }
+.btn-white:hover { background: rgba(255,255,255,.3); transform: translateY(-1px); }
+
+/* ── MISC ────────────────────────────────────────────────────────── */
+.flex { display: flex; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.items-center { align-items: center; }
+.text-muted { color: var(--text-muted); }
+.text-success { color: var(--success); }
+.text-danger { color: var(--danger); }
+.text-warning { color: var(--warning); }
+.text-primary { color: var(--primary); }
+.loading { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* ── RESPONSIVE ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  #sidebar { width: 64px; }
+  .sidebar-header .sidebar-sub,
+  .sidebar-header .sidebar-hisense,
+  .nav-section-label,
+  .sidebar-footer-info { display: none; }
+  .sidebar-header { padding: 12px 8px; text-align: center; }
+  .sidebar-header .sidebar-brand { font-size: 9px; letter-spacing: .05em; }
+  .nav-item { justify-content: center; padding: 10px 0; }
+  .nav-item > span:not(.nav-icon):not(.nav-badge) { display: none; }
+  .nav-item .nav-icon { width: 28px; font-size: 18px; }
+  .nav-item::before { display: none; }
+  .nav-badge { position: absolute; top: 4px; right: 4px; min-width: 14px; padding: 1px 4px; font-size: 9px; }
+  #content { padding: 16px; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .welcome-banner { flex-direction: column; }
+}
+@media (max-width: 600px) {
+  .topbar-search, .topbar-divider { display: none; }
+  .scraping-controls { gap: 4px; }
+  .engine-toggle { display: none; }
+}
 </style>
 </head>
 <body>
 <div id="app">
 
-<!-- SIDEBAR -->
+<!-- ═══ SIDEBAR ════════════════════════════════════════════════════ -->
 <div id="sidebar">
-  <div class="sidebar-logo">
-    <div class="brand">CQM</div>
-    <div class="sub">Customer Query Management</div>
-    <div class="hisense">Hisense PoC v2.0</div>
+  <div class="sidebar-header">
+    <div class="sidebar-brand">CQM</div>
+    <div class="sidebar-sub">Customer Query Management</div>
   </div>
   <nav id="nav">
+    <div class="nav-section-label">Main</div>
     <a class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')">
-      <span class="icon">📊</span> Dashboard
+      <span class="nav-icon">📊</span>
+      <span>Dashboard</span>
     </a>
     <a class="nav-item" data-tab="scrape-targets" onclick="showTab('scrape-targets')">
-      <span class="icon">🎯</span> Scrape Targets
+      <span class="nav-icon">🎯</span>
+      <span>Scrape Targets</span>
     </a>
+    <div class="nav-section-label">Queues</div>
     <a class="nav-item" data-tab="review-queue" onclick="showTab('review-queue')">
-      <span class="icon">🔍</span> Review Queue
-      <span class="badge" id="review-badge" style="display:none">0</span>
+      <span class="nav-icon">🔍</span>
+      <span>Review Queue</span>
+      <span class="nav-badge" id="review-badge" style="display:none">0</span>
     </a>
     <a class="nav-item" data-tab="answer-queue" onclick="showTab('answer-queue')">
-      <span class="icon">✅</span> Answered
+      <span class="nav-icon">✅</span>
+      <span>Answered</span>
     </a>
+    <div class="nav-section-label">Knowledge</div>
     <a class="nav-item" data-tab="knowledge-base" onclick="showTab('knowledge-base')">
-      <span class="icon">📚</span> Knowledge Base
+      <span class="nav-icon">📚</span>
+      <span>Knowledge Base</span>
     </a>
+    <div class="nav-section-label">Operations</div>
     <a class="nav-item" data-tab="agents" onclick="showTab('agents')">
-      <span class="icon">👥</span> Agents
+      <span class="nav-icon">👥</span>
+      <span>Agents</span>
     </a>
     <a class="nav-item" data-tab="scrape-logs" onclick="showTab('scrape-logs')">
-      <span class="icon">📋</span> Scrape Logs
+      <span class="nav-icon">📋</span>
+      <span>Scrape Logs</span>
     </a>
     <a class="nav-item" data-tab="post-answers" onclick="showTab('post-answers')">
-      <span class="icon">📤</span> Post Answers
+      <span class="nav-icon">📤</span>
+      <span>Post Answers</span>
     </a>
     <a class="nav-item" data-tab="config" onclick="showTab('config')">
-      <span class="icon">⚙️</span> Configuration
+      <span class="nav-icon">⚙️</span>
+      <span>Configuration</span>
     </a>
   </nav>
-  <div class="sidebar-bottom">
-    <div style="font-size:11px;color:var(--muted)" id="health-indicator">Checking...</div>
+  <div class="sidebar-footer">
+    <div class="sidebar-footer-info" id="health-indicator">Checking connection...</div>
   </div>
 </div>
 
-<!-- MAIN -->
+<!-- ═══ MAIN ═══════════════════════════════════════════════════════ -->
 <div id="main">
+
   <!-- TOPBAR -->
   <div id="topbar">
-    <h1 id="page-title">Dashboard</h1>
-    <div class="scraping-controls">
-      <div class="toggle-group">
-        <span>Auto</span>
-        <label class="toggle-switch">
-          <input type="checkbox" id="auto-toggle" onchange="toggleAuto(this.checked)">
-          <span class="toggle-slider"></span>
-        </label>
+    <div class="topbar-logo">
+      <div class="logo-icon">CQM</div>
+      <div>
+        <div class="logo-text" id="page-title">Dashboard</div>
       </div>
-      <div class="engine-toggle">
-        <button class="engine-btn active" id="engine-scraperapi" onclick="setEngine('scraperapi')">ScraperAPI</button>
-        <button class="engine-btn" id="engine-apify" onclick="setEngine('apify')">Apify</button>
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="scrapeNow()" id="scrape-now-btn">⚡ Scrape Now</button>
-      <button id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-size:14px">☀️</button>
     </div>
-    <div class="role-selector">
-      <span>Viewing as:</span>
-      <select id="role-select" onchange="setRole(this.value)">
-        <option value="admin">👑 Admin User</option>
-        <option value="manager">📊 Sarah Manager</option>
-        <option value="agent_alex">🎧 Alex Agent</option>
-        <option value="agent_jamie">🎧 Jamie Agent</option>
-      </select>
+
+    <div class="topbar-right">
+      <div class="scraping-controls">
+        <div class="toggle-group">
+          <span>Auto</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="auto-toggle" onchange="toggleAuto(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="engine-toggle">
+          <button class="engine-btn active" id="engine-scraperapi" onclick="setEngine('scraperapi')">ScraperAPI</button>
+          <button class="engine-btn" id="engine-apify" onclick="setEngine('apify')">Apify</button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="scrapeNow()" id="scrape-now-btn">
+          ⚡ Scrape Now
+        </button>
+      </div>
+      <div class="topbar-divider"></div>
+      <button class="icon-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme">
+        🌙
+      </button>
+      <div class="role-selector">
+        
+        <select id="role-select" onchange="setRole(this.value)">
+          <option value="admin">Admin User</option>
+          <option value="manager">Sarah Manager</option>
+          <option value="agent_alex">Alex Agent</option>
+          <option value="agent_jamie">Jamie Agent</option>
+        </select>
+      </div>
     </div>
   </div>
 
-  <!-- CONTENT AREA -->
+  <!-- CONTENT -->
   <div id="content">
-    <!-- Each tab section rendered via JS -->
     <div id="tab-dashboard"></div>
     <div id="tab-scrape-targets" style="display:none"></div>
     <div id="tab-review-queue" style="display:none"></div>
@@ -279,12 +490,12 @@ canvas{max-height:220px}
 </div>
 
 <div class="toast" id="toast"></div>
+
 <script>
 // ================================================================
-// CQM v2 — Frontend JavaScript
+// CQM v2 — Frontend JS (all logic preserved, visual layer replaced)
 // ================================================================
 
-// ── API URL — stored in localStorage, configurable from Settings tab ──
 function getAPI() {
   return (localStorage.getItem('cqm_api_url') || 'https://cqm-v2-backend.onrender.com/api').replace(/\/$/, '');
 }
@@ -296,38 +507,22 @@ let scrapingConfig = { auto_enabled: true, engine: 'scraperapi', interval_minute
 let dashCharts = {};
 let reviewPage = 1, answerPage = 1;
 
-// ── THEME ─────────────────────────────────────────────────────────
+// ── THEME ──────────────────────────────────────────────────────────
 function applyTheme(theme) {
-  const root = document.documentElement;
-  if (theme === 'light') {
-    root.style.setProperty('--bg',      '#f1f3f7');
-    root.style.setProperty('--surface', '#ffffff');
-    root.style.setProperty('--card',    '#ffffff');
-    root.style.setProperty('--border',  '#e2e6ef');
-    root.style.setProperty('--text',    '#1a1f2e');
-    root.style.setProperty('--muted',   '#64748b');
-  } else {
-    root.style.setProperty('--bg',      '#0f1117');
-    root.style.setProperty('--surface', '#181c24');
-    root.style.setProperty('--card',    '#1e2330');
-    root.style.setProperty('--border',  '#2a3042');
-    root.style.setProperty('--text',    '#e8eaf0');
-    root.style.setProperty('--muted',   '#8892a4');
-  }
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : '');
   localStorage.setItem('cqm_theme', theme);
-  document.getElementById('theme-toggle-btn').textContent = theme === 'light' ? '🌙' : '☀️';
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
 }
 
 function toggleTheme() {
-  const current = localStorage.getItem('cqm_theme') || 'dark';
-  applyTheme(current === 'dark' ? 'light' : 'dark');
+  const current = localStorage.getItem('cqm_theme') || 'light';
+  applyTheme(current === 'light' ? 'dark' : 'light');
 }
 
-// ── INIT ─────────────────────────────────────────────────────────
+// ── INIT ───────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
-  // Apply saved theme
-  applyTheme(localStorage.getItem('cqm_theme') || 'dark');
-  // Show API URL setup prompt if not configured
+  applyTheme(localStorage.getItem('cqm_theme') || 'light');
   if (!localStorage.getItem('cqm_api_url')) showApiSetup();
   await loadConfig();
   await checkHealth();
@@ -341,13 +536,14 @@ function showApiSetup() {
   if (existing) return;
   const banner = document.createElement('div');
   banner.id = 'api-setup-banner';
-  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:var(--accent);color:#fff;padding:10px 20px;display:flex;align-items:center;gap:12px;font-size:13px';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:var(--primary);color:#fff;padding:10px 20px;display:flex;align-items:center;gap:12px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
   banner.innerHTML = `
-    <span>⚙️ Set your backend API URL to get started:</span>
+    ⚙️
+    <span style="font-weight:600">Set your backend API URL to connect:</span>
     <input id="api-url-input" type="text" placeholder="https://your-app.onrender.com/api"
-      style="flex:1;padding:5px 10px;border-radius:6px;border:none;font-size:13px;max-width:400px;color:#1a1f2e">
-    <button onclick="saveApiUrl()" style="background:#fff;color:var(--accent);border:none;padding:5px 14px;border-radius:6px;font-weight:700;cursor:pointer">Save</button>
-    <button onclick="document.getElementById('api-setup-banner').remove()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:5px 10px;border-radius:6px;cursor:pointer">Skip</button>`;
+      style="flex:1;padding:7px 12px;border-radius:6px;border:none;font-size:13px;max-width:400px;color:#181818">
+    <button onclick="saveApiUrl()" style="background:#fff;color:var(--primary);border:none;padding:7px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px">Save</button>
+    <button onclick="document.getElementById('api-setup-banner').remove()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:13px">Skip</button>`;
   document.body.prepend(banner);
 }
 
@@ -358,31 +554,35 @@ function saveApiUrl() {
   localStorage.setItem('cqm_api_url', url);
   API = url;
   document.getElementById('api-setup-banner')?.remove();
-  toast('API URL saved — reloading...', 'success');
-  setTimeout(() => location.reload(), 1000);
+  toast('API URL saved', 'success');
+  setTimeout(() => location.reload(), 800);
 }
 
-// ── TOAST ─────────────────────────────────────────────────────────
+// ── TOAST ──────────────────────────────────────────────────────────
 function toast(msg, type = 'info') {
+  const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info' };
   const t = document.getElementById('toast');
-  t.textContent = msg;
+  t.innerHTML = ` ${msg}`;
   t.className = `toast show ${type}`;
   clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-// ── HEALTH ────────────────────────────────────────────────────────
+// ── HEALTH ─────────────────────────────────────────────────────────
 async function checkHealth() {
   try {
     const data = await apiFetch('/health');
     const el = document.getElementById('health-indicator');
     if (data.status === 'ok') {
-      el.innerHTML = `<span style="color:var(--success)">● Live</span> · ${data.counts?.questions || 0} Q`;
+      el.innerHTML = `<span style="color:var(--success)">● Connected</span> · ${data.counts?.questions||0} questions`;
     } else {
       el.innerHTML = `<span style="color:var(--danger)">● Error</span>`;
     }
     updateReviewBadge(data.counts?.review || 0);
-  } catch { document.getElementById('health-indicator').innerHTML = `<span style="color:var(--danger)">● Offline</span>`; }
+  } catch {
+    const el = document.getElementById('health-indicator');
+    if (el) el.innerHTML = `<span style="color:var(--danger)">● Offline</span>`;
+  }
 }
 
 function updateReviewBadge(count) {
@@ -391,7 +591,7 @@ function updateReviewBadge(count) {
   else { badge.style.display = 'none'; }
 }
 
-// ── API HELPER ────────────────────────────────────────────────────
+// ── API HELPER ─────────────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
   const res = await fetch(API + path, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -404,49 +604,35 @@ async function apiFetch(path, options = {}) {
   return res.json();
 }
 
-// ── TAB NAVIGATION ────────────────────────────────────────────────
+// ── TAB NAVIGATION ─────────────────────────────────────────────────
 function showTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
   document.getElementById(`tab-${tab}`).style.display = '';
   currentTab = tab;
-
   const titles = {
-    'dashboard': 'Dashboard',
-    'scrape-targets': 'Scrape Targets',
-    'review-queue': 'Review Queue',
-    'answer-queue': 'Answered Questions',
-    'knowledge-base': 'Knowledge Base',
-    'agents': 'Agents',
-    'scrape-logs': 'Scrape Logs',
-    'post-answers': 'Post Answers',
-    'config': 'Configuration'
+    'dashboard':'Dashboard','scrape-targets':'Scrape Targets','review-queue':'Review Queue',
+    'answer-queue':'Answered Questions','knowledge-base':'Knowledge Base','agents':'Agents',
+    'scrape-logs':'Scrape Logs','post-answers':'Post Answers','config':'Configuration'
   };
   document.getElementById('page-title').textContent = titles[tab] || tab;
-
   const loaders = {
-    'dashboard': loadDashboard,
-    'scrape-targets': loadScrapeTargets,
-    'review-queue': loadReviewQueue,
-    'answer-queue': loadAnswerQueue,
-    'knowledge-base': loadKB,
-    'agents': loadAgents,
-    'scrape-logs': loadScrapeLogs,
-    'post-answers': loadPostAnswers,
-    'config': loadConfig_tab
+    'dashboard':loadDashboard,'scrape-targets':loadScrapeTargets,'review-queue':loadReviewQueue,
+    'answer-queue':loadAnswerQueue,'knowledge-base':loadKB,'agents':loadAgents,
+    'scrape-logs':loadScrapeLogs,'post-answers':loadPostAnswers,'config':loadConfig_tab
   };
   loaders[tab]?.();
 }
 
-// ── ROLE ──────────────────────────────────────────────────────────
+// ── ROLE ───────────────────────────────────────────────────────────
 function setRole(role) {
   currentRole = role;
   if (currentTab === 'review-queue') loadReviewQueue();
   if (currentTab === 'agents') loadAgents();
 }
 
-// ── SCRAPING CONTROLS ─────────────────────────────────────────────
+// ── SCRAPING CONTROLS ──────────────────────────────────────────────
 async function loadConfig() {
   try {
     const cfg = await apiFetch('/config');
@@ -475,135 +661,196 @@ async function toggleAuto(enabled) {
 
 async function saveScrapingConfig() {
   try {
-    await apiFetch('/scrape/config', {
-      method: 'POST',
-      body: JSON.stringify(scrapingConfig)
-    });
+    await apiFetch('/scrape/config', { method: 'POST', body: JSON.stringify(scrapingConfig) });
   } catch (e) { toast('Config save failed: ' + e.message, 'error'); }
 }
 
 async function scrapeNow() {
   const btn = document.getElementById('scrape-now-btn');
-  btn.disabled = true; btn.textContent = '⏳ Scraping...';
+  btn.disabled = true; btn.innerHTML = '⏳ Scraping...';
   try {
     const result = await apiFetch('/scrape/now', { method: 'POST' });
-    toast(`Scraped ${result.scraped || 0} targets · ${result.logs?.reduce((s,l)=>s+l.new_count,0)||0} new questions`, 'success');
+    toast(`Scraped ${result.scraped||0} targets · ${result.logs?.reduce((s,l)=>s+l.new_count,0)||0} new questions`, 'success');
     if (currentTab === 'dashboard') loadDashboard();
     if (currentTab === 'review-queue') loadReviewQueue();
     checkHealth();
   } catch (e) { toast('Scrape failed: ' + e.message, 'error'); }
-  finally { btn.disabled = false; btn.textContent = '⚡ Scrape Now'; }
+  finally { btn.disabled = false; btn.innerHTML = '⚡ Scrape Now'; }
 }
 
-// ── DASHBOARD ────────────────────────────────────────────────────
+// ── DASHBOARD ──────────────────────────────────────────────────────
 async function loadDashboard() {
   const el = document.getElementById('tab-dashboard');
-  el.innerHTML = '<div class="loading">Loading dashboard...</div>';
+  el.innerHTML = skeletonDashboard();
   try {
     const s = await apiFetch('/dashboard/stats');
     Object.values(dashCharts).forEach(c => c.destroy());
     dashCharts = {};
 
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
     el.innerHTML = `
+    <div class="welcome-banner">
+      <div class="welcome-text">
+        <h2>${greeting} — CQM Operations Dashboard</h2>
+        <p>Monitor customer questions, AI performance, and agent workload across BestBuy and Amazon.</p>
+      </div>
+      <div class="welcome-actions">
+        <button class="btn btn-white btn-sm" onclick="scrapeNow()">⚡ Scrape Now</button>
+        <button class="btn btn-white btn-sm" onclick="showTab('review-queue')">🔍 Review Queue ${s.review>0?`<span style="background:var(--danger);border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${s.review}</span>`:''}</button>
+      </div>
+    </div>
+
     <div class="stat-grid">
-      <div class="stat-card"><div class="stat-value">${s.total||0}</div><div class="stat-label">Total Questions</div></div>
-      <div class="stat-card success"><div class="stat-value">${s.answered||0}</div><div class="stat-label">Answered</div></div>
-      <div class="stat-card warning"><div class="stat-value">${s.review||0}</div><div class="stat-label">In Review</div></div>
-      <div class="stat-card info"><div class="stat-value">${s.unanswered||0}</div><div class="stat-label">Pending</div></div>
-      <div class="stat-card accent"><div class="stat-value">${s.automation_rate||0}%</div><div class="stat-label">Automation Rate</div><div class="stat-sub">${s.auto_approved||0} auto-approved</div></div>
-      <div class="stat-card ${s.sla_breached>0?'danger':''}"><div class="stat-value">${s.sla_breached||0}</div><div class="stat-label">SLA Breached</div><div class="stat-sub">>24hrs pending</div></div>
-      <div class="stat-card"><div class="stat-value">${s.kb_entries||0}</div><div class="stat-label">KB Entries</div></div>
+      <div class="stat-card primary">
+        <div class="stat-icon">💬</div>
+        <div class="stat-value">${s.total||0}</div>
+        <div class="stat-label">Total Questions</div>
+        <div class="stat-sub">All time</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value">${s.answered||0}</div>
+        <div class="stat-label">Answered</div>
+        <div class="stat-sub">${s.total>0?Math.round(s.answered/s.total*100):0}% of total</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-icon">🕐</div>
+        <div class="stat-value">${s.review||0}</div>
+        <div class="stat-label">In Review</div>
+        <div class="stat-sub">Needs attention</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-value">${s.unanswered||0}</div>
+        <div class="stat-label">Pending</div>
+        <div class="stat-sub">Awaiting processing</div>
+      </div>
+      <div class="stat-card primary">
+        <div class="stat-icon">🤖</div>
+        <div class="stat-value">${s.automation_rate||0}%</div>
+        <div class="stat-label">Automation Rate</div>
+        <div class="stat-sub">${s.auto_approved||0} auto-approved</div>
+      </div>
+      <div class="stat-card ${s.sla_breached>0?'danger':'success'}">
+        <div class="stat-icon">⚠️</div>
+        <div class="stat-value">${s.sla_breached||0}</div>
+        <div class="stat-label">SLA Breaches</div>
+        <div class="stat-sub">&gt;24hrs pending</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-icon">📚</div>
+        <div class="stat-value">${s.kb_entries||0}</div>
+        <div class="stat-label">KB Articles</div>
+        <div class="stat-sub">Knowledge base</div>
+      </div>
     </div>
 
     <div class="chart-grid">
-      <div class="chart-box"><h3>Questions by Category</h3><canvas id="chart-category"></canvas></div>
-      <div class="chart-box"><h3>Questions by Sentiment</h3><canvas id="chart-sentiment"></canvas></div>
-      <div class="chart-box"><h3>Questions by Retailer</h3><canvas id="chart-retailer"></canvas></div>
+      <div class="chart-box"><h3>By Category</h3><canvas id="chart-category"></canvas></div>
+      <div class="chart-box"><h3>By Sentiment</h3><canvas id="chart-sentiment"></canvas></div>
+      <div class="chart-box"><h3>By Retailer</h3><canvas id="chart-retailer"></canvas></div>
       <div class="chart-box"><h3>7-Day Trend</h3><canvas id="chart-trend"></canvas></div>
     </div>`;
 
     renderCharts(s);
-  } catch (e) { el.innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`; }
+  } catch (e) {
+    el.innerHTML = emptyState('fa-chart-line', 'Dashboard unavailable', `Could not load stats: ${e.message}`, 'Check Configuration', "showTab('config')");
+  }
+}
+
+function skeletonDashboard() {
+  return `<div class="stat-grid">${Array(7).fill(0).map(()=>`
+    <div class="stat-card"><div class="skeleton" style="width:40px;height:40px;border-radius:10px;margin-bottom:14px"></div>
+    <div class="skeleton" style="width:60px;height:30px;margin-bottom:8px"></div>
+    <div class="skeleton" style="width:100px;height:12px"></div></div>`).join('')}</div>
+    <div class="chart-grid">${Array(4).fill(0).map(()=>`
+    <div class="chart-box"><div class="skeleton" style="width:120px;height:13px;margin-bottom:16px"></div>
+    <div class="skeleton" style="width:100%;height:200px;border-radius:8px"></div></div>`).join('')}</div>`;
 }
 
 function renderCharts(s) {
-  const COLORS = ['#e8502a','#3b82f6','#22c55e','#f59e0b','#a855f7','#06b6d4','#ec4899','#84cc16'];
-  const cfg = (labels, data, type='doughnut') => ({
-    type,
-    data: {
-      labels,
-      datasets: [{ data, backgroundColor: COLORS.slice(0, labels.length), borderWidth: 0 }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: true,
-      plugins: { legend: { position:'right', labels: { color:'#8892a4', font:{size:11}, boxWidth:12 } } }
-    }
+  const COLORS = ['#0176D3','#2E844A','#DD7A01','#EA001E','#7C3AED','#0891B2','#DB2777','#65A30D'];
+  const isDark = localStorage.getItem('cqm_theme') === 'dark';
+  const legendColor = isDark ? '#8892A4' : '#5F6A7D';
+  const gridColor = isDark ? '#2A3042' : '#E8ECF2';
+
+  const doughnutCfg = (labels, data) => ({
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: COLORS.slice(0,labels.length), borderWidth: 2, borderColor: isDark ? '#1E2330' : '#fff' }] },
+    options: { responsive:true, maintainAspectRatio:true, cutout:'65%',
+      plugins: { legend: { position:'right', labels:{ color:legendColor, font:{size:11}, boxWidth:12, padding:8 } } } }
   });
 
   const catLabels = Object.keys(s.by_category||{});
-  if (catLabels.length) dashCharts.cat = new Chart(document.getElementById('chart-category'), cfg(catLabels, catLabels.map(k=>s.by_category[k])));
+  if (catLabels.length) dashCharts.cat = new Chart(document.getElementById('chart-category'), doughnutCfg(catLabels, catLabels.map(k=>s.by_category[k])));
 
   const sentLabels = Object.keys(s.by_sentiment||{});
-  if (sentLabels.length) dashCharts.sent = new Chart(document.getElementById('chart-sentiment'), cfg(sentLabels, sentLabels.map(k=>s.by_sentiment[k])));
+  if (sentLabels.length) dashCharts.sent = new Chart(document.getElementById('chart-sentiment'), doughnutCfg(sentLabels, sentLabels.map(k=>s.by_sentiment[k])));
 
   const retLabels = Object.keys(s.by_retailer||{});
-  if (retLabels.length) dashCharts.ret = new Chart(document.getElementById('chart-retailer'), cfg(retLabels, retLabels.map(k=>s.by_retailer[k])));
+  if (retLabels.length) dashCharts.ret = new Chart(document.getElementById('chart-retailer'), doughnutCfg(retLabels, retLabels.map(k=>s.by_retailer[k])));
 
-  // Trend line chart
   const trend = s.trend || [];
   if (trend.length) {
     dashCharts.trend = new Chart(document.getElementById('chart-trend'), {
       type: 'line',
-      data: {
-        labels: trend.map(d=>d.date),
+      data: { labels: trend.map(d=>d.date),
         datasets: [
-          { label:'Total', data: trend.map(d=>d.total), borderColor:'#e8502a', backgroundColor:'rgba(232,80,42,.1)', fill:true, tension:.4 },
-          { label:'Answered', data: trend.map(d=>d.answered), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.1)', fill:true, tension:.4 }
+          { label:'Total', data:trend.map(d=>d.total), borderColor:'#0176D3', backgroundColor:'rgba(1,118,211,.08)', fill:true, tension:.4, pointRadius:3, pointBackgroundColor:'#0176D3' },
+          { label:'Answered', data:trend.map(d=>d.answered), borderColor:'#2E844A', backgroundColor:'rgba(46,132,74,.08)', fill:true, tension:.4, pointRadius:3, pointBackgroundColor:'#2E844A' }
         ]
       },
-      options: {
-        responsive: true, maintainAspectRatio: true,
-        plugins: { legend: { labels: { color:'#8892a4', font:{size:11} } } },
+      options: { responsive:true, maintainAspectRatio:true,
+        plugins: { legend: { labels:{ color:legendColor, font:{size:11} } } },
         scales: {
-          x: { ticks:{ color:'#8892a4', font:{size:10} }, grid:{ color:'#2a3042' } },
-          y: { ticks:{ color:'#8892a4', font:{size:10} }, grid:{ color:'#2a3042' } }
+          x: { ticks:{ color:legendColor, font:{size:10} }, grid:{ color:gridColor } },
+          y: { ticks:{ color:legendColor, font:{size:10} }, grid:{ color:gridColor } }
         }
       }
     });
   }
 }
 
-// ── SCRAPE TARGETS ───────────────────────────────────────────────
+// ── SCRAPE TARGETS ─────────────────────────────────────────────────
 async function loadScrapeTargets() {
   const el = document.getElementById('tab-scrape-targets');
   el.innerHTML = `
-  <div class="section-header">
-    <div class="section-title">Scrape Targets</div>
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Scrape Targets</div>
+    <h1>Scrape Targets</h1>
+    <p>Manage product URLs for BestBuy and Amazon scraping. Upload an Excel file to add products.</p>
+  </div>
+  <div class="section-header" style="margin-bottom:16px">
+    <div></div>
     <div class="flex gap-2">
       <a href="${API}/scrape-targets/template" class="btn btn-secondary btn-sm">⬇️ Download Template</a>
       <button class="btn btn-primary btn-sm" onclick="showUploadForm()">⬆️ Upload Excel</button>
     </div>
   </div>
   <div id="upload-area"></div>
-  <div class="card" id="targets-card"><div class="loading">Loading targets...</div></div>`;
+  <div class="card" id="targets-card"><div class="loading">⏳ Loading targets...</div></div>`;
   await refreshTargets();
 }
 
 function showUploadForm() {
   const area = document.getElementById('upload-area');
   area.innerHTML = `
-  <div class="card">
-    <div class="card-title">Upload Product URLs (Excel)</div>
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">📊 Upload Product URLs</div>
     <div class="upload-zone" id="upload-zone" onclick="document.getElementById('excel-file').click()"
          ondragover="event.preventDefault();this.classList.add('drag')"
          ondragleave="this.classList.remove('drag')"
          ondrop="handleDrop(event)">
-      <div style="font-size:32px">📊</div>
+      <div class="upload-icon">☁️</div>
       <p>Click or drag an Excel file here</p>
-      <p style="font-size:11px;margin-top:4px">Columns: retailer, product_name, url, active</p>
+      <div class="upload-hint">Required columns: retailer, product_name, url, active</div>
     </div>
     <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(this.files[0])">
-    <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="document.getElementById('upload-area').innerHTML=''">Cancel</button>
+    <button class="btn btn-secondary btn-sm" style="margin-top:14px" onclick="document.getElementById('upload-area').innerHTML=''">
+      ✕ Cancel
+    </button>
   </div>`;
 }
 
@@ -622,7 +869,7 @@ async function uploadExcel(file) {
     const res = await fetch(`${API}/scrape-targets/upload`, { method: 'POST', body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    toast(`${data.inserted} targets uploaded`, 'success');
+    toast(`${data.inserted} targets uploaded successfully`, 'success');
     document.getElementById('upload-area').innerHTML = '';
     await refreshTargets();
   } catch (e) { toast('Upload failed: ' + e.message, 'error'); }
@@ -633,32 +880,33 @@ async function refreshTargets() {
   if (!card) return;
   try {
     const targets = await apiFetch('/scrape-targets');
-    if (!targets.length) { card.innerHTML = '<div class="empty">No scrape targets yet. Upload an Excel file to get started.</div>'; return; }
-
+    if (!targets.length) {
+      card.innerHTML = emptyState('fa-crosshairs', 'No scrape targets yet', 'Upload an Excel file with product URLs to start scraping BestBuy and Amazon.', 'Upload Excel', 'showUploadForm()');
+      return;
+    }
     card.innerHTML = `
-    <div class="table-wrap">
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr>
         <th>Retailer</th><th>Product</th><th>URL</th><th>Status</th>
-        <th>Last Scraped</th><th>Found</th><th>Active</th><th>Actions</th>
+        <th>Last Scraped</th><th>Questions Found</th><th>Active</th><th>Actions</th>
       </tr></thead>
-      <tbody>${targets.map(t => `
+      <tbody>${targets.map(t=>`
         <tr>
-          <td><span class="badge-pill ${t.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${t.retailer}</span></td>
-          <td class="truncate" style="max-width:200px">${t.product_name}</td>
-          <td><a href="${t.url}" target="_blank" style="color:var(--info);font-size:12px">View ↗</a></td>
+          <td><span class="badge-pill ${t.retailer==='bestbuy'?'badge-blue':'badge-orange'}">🏪 ${t.retailer}</span></td>
+          <td><div class="truncate" style="max-width:200px;font-weight:500">${t.product_name}</div></td>
+          <td><a href="${t.url}" target="_blank" style="color:var(--primary);font-size:12px">↗ View</a></td>
           <td><span class="badge-pill ${t.is_active?'badge-green':'badge-gray'}">${t.is_active?'Active':'Inactive'}</span></td>
-          <td style="color:var(--muted);font-size:12px">${t.last_scraped_at ? new Date(t.last_scraped_at).toLocaleString() : '—'}</td>
-          <td>${t.questions_found_total||0}</td>
+          <td style="color:var(--text-muted);font-size:12px">${t.last_scraped_at?new Date(t.last_scraped_at).toLocaleString():'Never'}</td>
+          <td style="font-weight:600">${t.questions_found_total||0}</td>
           <td><label class="toggle-switch"><input type="checkbox" ${t.is_active?'checked':''} onchange="toggleTarget('${t.id}',this.checked)"><span class="toggle-slider"></span></label></td>
-          <td>
-            <button class="btn btn-secondary btn-sm" onclick="scrapeTarget('${t.id}')">⚡ Now</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteTarget('${t.id}')">🗑</button>
-          </td>
+          <td><div class="flex gap-2">
+            <button class="btn btn-secondary btn-xs" onclick="scrapeTarget('${t.id}')">⚡ Now</button>
+            <button class="btn btn-danger btn-xs" onclick="deleteTarget('${t.id}')">🗑</button>
+          </div></td>
         </tr>`).join('')}
       </tbody>
     </table></div>`;
-  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation', 'Error loading targets', e.message); }
 }
 
 async function toggleTarget(id, active) {
@@ -675,33 +923,34 @@ async function deleteTarget(id) {
 async function scrapeTarget(id) {
   try {
     const log = await apiFetch(`/scrape/target/${id}`, { method:'POST' });
-    toast(`Found ${log.found_count} questions, ${log.new_count} new`, log.error ? 'error' : 'success');
+    toast(`Found ${log.found_count} questions · ${log.new_count} new`, log.error?'error':'success');
     await refreshTargets();
   } catch (e) { toast(e.message,'error'); }
 }
 
-// ── REVIEW QUEUE ──────────────────────────────────────────────────
+// ── REVIEW QUEUE ───────────────────────────────────────────────────
 async function loadReviewQueue(page = 1) {
   reviewPage = page;
   const el = document.getElementById('tab-review-queue');
   el.innerHTML = `
-  <div class="section-header">
-    <div class="section-title">Review Queue</div>
-    <div class="filters">
-      <select class="form-select" id="rq-retailer" onchange="loadReviewQueue(1)">
-        <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
-      </select>
-      <select class="form-select" id="rq-category" onchange="loadReviewQueue(1)">
-        <option value="">All Categories</option>
-        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
-      </select>
-      <select class="form-select" id="rq-sentiment" onchange="loadReviewQueue(1)">
-        <option value="">All Sentiments</option><option value="positive">Positive</option><option value="neutral">Neutral</option><option value="negative">Negative</option>
-      </select>
-    </div>
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Review Queue</div>
+    <h1>Review Queue</h1>
+    <p>Questions requiring human review — low confidence or non-English responses.</p>
   </div>
-  <div class="card" id="review-table-card"><div class="loading">Loading...</div></div>`;
-
+  <div class="filters">
+    <select class="form-select" id="rq-retailer" onchange="loadReviewQueue(1)">
+      <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
+    </select>
+    <select class="form-select" id="rq-category" onchange="loadReviewQueue(1)">
+      <option value="">All Categories</option>
+      ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+    </select>
+    <select class="form-select" id="rq-sentiment" onchange="loadReviewQueue(1)">
+      <option value="">All Sentiments</option><option value="positive">Positive</option><option value="neutral">Neutral</option><option value="negative">Negative</option>
+    </select>
+  </div>
+  <div class="card" id="review-table-card"><div class="loading">⏳ Loading...</div></div>`;
   await refreshReviewQueue();
 }
 
@@ -709,62 +958,72 @@ async function refreshReviewQueue() {
   const card = document.getElementById('review-table-card');
   if (!card) return;
   try {
-    const retailer  = document.getElementById('rq-retailer')?.value || '';
-    const category  = document.getElementById('rq-category')?.value || '';
-    const sentiment = document.getElementById('rq-sentiment')?.value || '';
+    const retailer  = document.getElementById('rq-retailer')?.value||'';
+    const category  = document.getElementById('rq-category')?.value||'';
+    const sentiment = document.getElementById('rq-sentiment')?.value||'';
     const agentFilter = getAgentFilter();
 
     let url = `/questions?status=review&page=${reviewPage}&limit=15`;
-    if (retailer) url += `&retailer=${retailer}`;
-    if (category) url += `&category=${category}`;
+    if (retailer)  url += `&retailer=${retailer}`;
+    if (category)  url += `&category=${category}`;
     if (sentiment) url += `&sentiment=${sentiment}`;
     if (agentFilter) url += `&assigned_to=${encodeURIComponent(agentFilter)}`;
 
     const { data, total } = await apiFetch(url);
     updateReviewBadge(total);
 
-    if (!data?.length) { card.innerHTML = '<div class="empty">No questions in review queue.</div>'; return; }
+    if (!data?.length) {
+      card.innerHTML = emptyState('fa-inbox', 'Review queue is empty', 'All questions have been processed. Great work!');
+      return;
+    }
 
     card.innerHTML = `
-    <div class="table-wrap">
-    <table id="review-table">
+    <div class="table-wrap"><table id="review-table">
       <thead><tr>
         <th>Date Asked</th><th>Retailer</th><th>Question</th>
         <th>Category</th><th>Sentiment</th><th>Confidence</th>
         <th>Assigned To</th><th>Reason</th><th>Actions</th>
       </tr></thead>
       <tbody>
-      ${data.map(q => `
+      ${data.map(q=>`
         <tr id="row-${q.id}">
-          <td style="white-space:nowrap;color:var(--muted);font-size:12px">${q.date_asked ? new Date(q.date_asked).toLocaleDateString() : new Date(q.created_at).toLocaleDateString()}</td>
+          <td style="white-space:nowrap;color:var(--text-muted);font-size:12px">${q.date_asked?new Date(q.date_asked).toLocaleDateString():new Date(q.created_at).toLocaleDateString()}</td>
           <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
-          <td><div class="truncate" style="max-width:250px">${q.question_text}</div></td>
+          <td><div class="truncate" style="max-width:240px">${q.question_text}</div></td>
           <td>${catBadge(q.category)}</td>
           <td>${sentBadge(q.sentiment)}</td>
           <td>${confidenceBadge(q.confidence)}</td>
-          <td style="font-size:12px;color:var(--muted)">${q.assigned_to||'—'}</td>
-          <td style="max-width:160px;font-size:11px;color:var(--muted)">${q.review_reason||'—'}</td>
-          <td><button class="btn btn-secondary btn-sm" onclick="toggleExpand('${q.id}')">Expand</button></td>
+          <td style="font-size:12px;color:var(--text-secondary)">${q.assigned_to||'—'}</td>
+          <td style="max-width:150px;font-size:11px;color:var(--text-muted)">${q.review_reason||'—'}</td>
+          <td><button class="btn btn-secondary btn-xs" onclick="toggleExpand('${q.id}')">▼ Expand</button></td>
         </tr>
         <tr class="expand-row" id="expand-${q.id}">
           <td colspan="9">
             <div class="expand-panel">
-              <h4>Full Question</h4>
-              <p style="margin-bottom:12px">${q.question_text}</p>
-              ${q.existing_answer ? `<h4>Existing Retailer Answer</h4><p style="margin-bottom:12px;color:var(--muted)">${q.existing_answer}</p>` : ''}
-              <h4>AI Draft Answer (Editable)</h4>
-              <textarea class="form-textarea" id="draft-${q.id}" style="min-height:100px">${q.ai_answer||''}</textarea>
-              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px">
+                <div>
+                  <h4>❓ Full Question</h4>
+                  <p style="margin-top:6px;line-height:1.6">${q.question_text}</p>
+                  ${q.existing_answer?`<h4 style="margin-top:14px">🏪 Existing Retailer Answer</h4><p style="margin-top:6px;color:var(--text-muted);line-height:1.6">${q.existing_answer}</p>`:''}
+                </div>
+                <div>
+                  <h4>🤖 AI Draft Answer <span style="font-weight:400;text-transform:none;font-size:11px;color:var(--text-muted)">(editable)</span></h4>
+                  <textarea class="form-textarea" id="draft-${q.id}" style="margin-top:6px;min-height:120px">${q.ai_answer||''}</textarea>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                 <button class="btn btn-secondary btn-sm" onclick="saveDraft('${q.id}')">💾 Save Draft</button>
-                <button class="btn btn-success btn-sm" onclick="approveQuestion('${q.id}',false)">✅ Approve</button>
-                <button class="btn btn-primary btn-sm" onclick="approveQuestion('${q.id}',true)">✅ Approve + Add to KB</button>
-                <select class="form-select" id="assign-${q.id}" style="width:auto;padding:4px 8px;font-size:11px">
-                  <option value="">Reassign to...</option>
-                  <option value="Alex Agent">Alex Agent</option>
-                  <option value="Jamie Agent">Jamie Agent</option>
-                  <option value="Sarah Manager">Sarah Manager</option>
-                </select>
-                <button class="btn btn-secondary btn-sm" onclick="reassign('${q.id}')">↻ Reassign</button>
+                <button class="btn btn-success btn-sm" onclick="approveQuestion('${q.id}',false)">✓ Approve</button>
+                <button class="btn btn-primary btn-sm" onclick="approveQuestion('${q.id}',true)">✓✓ Approve + Add to KB</button>
+                <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+                  <select class="form-select" id="assign-${q.id}" style="width:auto;padding:6px 10px;font-size:12px">
+                    <option value="">Reassign to...</option>
+                    <option value="Alex Agent">Alex Agent</option>
+                    <option value="Jamie Agent">Jamie Agent</option>
+                    <option value="Sarah Manager">Sarah Manager</option>
+                  </select>
+                  <button class="btn btn-secondary btn-sm" onclick="reassign('${q.id}')">🔄 Reassign</button>
+                </div>
               </div>
             </div>
           </td>
@@ -772,7 +1031,7 @@ async function refreshReviewQueue() {
       </tbody>
     </table></div>
     ${pagination(total, reviewPage, 15, 'loadReviewQueue')}`;
-  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation', 'Error', e.message); }
 }
 
 function getAgentFilter() {
@@ -784,21 +1043,23 @@ function getAgentFilter() {
 function toggleExpand(id) {
   const row = document.getElementById(`expand-${id}`);
   row.classList.toggle('open');
+  const btn = row.previousElementSibling.querySelector(`button`);
+  if (btn) btn.innerHTML = row.classList.contains('open')
+    ? '▲ Collapse'
+    : '▼ Expand';
 }
 
 async function saveDraft(id) {
   const answer = document.getElementById(`draft-${id}`)?.value;
-  try {
-    await apiFetch(`/questions/${id}/draft`, { method:'PATCH', body: JSON.stringify({ answer }) });
-    toast('Draft saved','success');
-  } catch (e) { toast(e.message,'error'); }
+  try { await apiFetch(`/questions/${id}/draft`, { method:'PATCH', body: JSON.stringify({ answer }) }); toast('Draft saved','success'); }
+  catch (e) { toast(e.message,'error'); }
 }
 
 async function approveQuestion(id, addToKB) {
   const answer = document.getElementById(`draft-${id}`)?.value;
   try {
     await apiFetch(`/questions/${id}/approve`, { method:'PATCH', body: JSON.stringify({ answer, add_to_kb: addToKB }) });
-    toast(addToKB ? 'Approved & added to KB' : 'Approved', 'success');
+    toast(addToKB?'Approved & added to KB':'Approved successfully','success');
     document.getElementById(`row-${id}`)?.remove();
     document.getElementById(`expand-${id}`)?.remove();
     checkHealth();
@@ -808,35 +1069,33 @@ async function approveQuestion(id, addToKB) {
 async function reassign(id) {
   const agent = document.getElementById(`assign-${id}`)?.value;
   if (!agent) return;
-  try {
-    await apiFetch(`/questions/${id}/assign`, { method:'PATCH', body: JSON.stringify({ assigned_to: agent }) });
-    toast(`Reassigned to ${agent}`, 'success');
-    await refreshReviewQueue();
-  } catch (e) { toast(e.message,'error'); }
+  try { await apiFetch(`/questions/${id}/assign`, { method:'PATCH', body: JSON.stringify({ assigned_to: agent }) }); toast(`Reassigned to ${agent}`,'success'); await refreshReviewQueue(); }
+  catch (e) { toast(e.message,'error'); }
 }
 
-// ── ANSWER QUEUE ──────────────────────────────────────────────────
+// ── ANSWER QUEUE ───────────────────────────────────────────────────
 async function loadAnswerQueue(page = 1) {
   answerPage = page;
   const el = document.getElementById('tab-answer-queue');
   el.innerHTML = `
-  <div class="section-header">
-    <div class="section-title">Answered Questions</div>
-    <div class="flex gap-2">
-      <a href="${API}/questions/export/csv" class="btn btn-secondary btn-sm">⬇️ Export</a>
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Answered Questions</div>
+    <h1>Answered Questions</h1>
+    <p>Complete audit trail of all answered customer questions.</p>
+  </div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+    <div class="filters" style="margin:0">
+      <select class="form-select" id="aq-retailer" onchange="loadAnswerQueue(1)">
+        <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
+      </select>
+      <select class="form-select" id="aq-category" onchange="loadAnswerQueue(1)">
+        <option value="">All Categories</option>
+        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
     </div>
+    <a href="${API}/questions/export/csv" class="btn btn-secondary btn-sm">⬇️ Export</a>
   </div>
-  <div class="filters">
-    <select class="form-select" id="aq-retailer" onchange="loadAnswerQueue(1)">
-      <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
-    </select>
-    <select class="form-select" id="aq-category" onchange="loadAnswerQueue(1)">
-      <option value="">All Categories</option>
-      ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
-    </select>
-  </div>
-  <div class="card" id="answer-table-card"><div class="loading">Loading...</div></div>`;
-
+  <div class="card" id="answer-table-card"><div class="loading">⏳ Loading...</div></div>`;
   await refreshAnswerQueue();
 }
 
@@ -844,52 +1103,56 @@ async function refreshAnswerQueue() {
   const card = document.getElementById('answer-table-card');
   if (!card) return;
   try {
-    const retailer = document.getElementById('aq-retailer')?.value || '';
-    const category = document.getElementById('aq-category')?.value || '';
+    const retailer = document.getElementById('aq-retailer')?.value||'';
+    const category = document.getElementById('aq-category')?.value||'';
     let url = `/questions?status=answered&page=${answerPage}&limit=20`;
     if (retailer) url += `&retailer=${retailer}`;
     if (category) url += `&category=${category}`;
 
     const { data, total } = await apiFetch(url);
-    if (!data?.length) { card.innerHTML = '<div class="empty">No answered questions yet.</div>'; return; }
+    if (!data?.length) { card.innerHTML = emptyState('fa-circle-check', 'No answered questions yet', 'Questions will appear here once approved.'); return; }
 
     card.innerHTML = `
-    <div class="table-wrap">
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr>
         <th>Date Asked</th><th>Date Answered</th><th>Retailer</th><th>Question</th>
         <th>Category</th><th>Sentiment</th><th>Confidence</th><th>Assigned To</th>
       </tr></thead>
       <tbody>${data.map(q=>`
         <tr>
-          <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${q.date_asked ? new Date(q.date_asked).toLocaleDateString() : '—'}</td>
-          <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${q.date_answered ? new Date(q.date_answered).toLocaleDateString() : '—'}</td>
+          <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${q.date_asked?new Date(q.date_asked).toLocaleDateString():'—'}</td>
+          <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
           <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
-          <td><div class="truncate">${q.question_text}</div><div style="font-size:11px;color:var(--muted);margin-top:3px">${(q.ai_answer||'').slice(0,80)}...</div></td>
+          <td><div class="truncate" style="font-weight:500">${q.question_text}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${(q.ai_answer||'').slice(0,80)}${q.ai_answer?.length>80?'...':''}</div></td>
           <td>${catBadge(q.category)}</td>
           <td>${sentBadge(q.sentiment)}</td>
           <td>${confidenceBadge(q.confidence)}</td>
-          <td style="font-size:12px;color:var(--muted)">${q.assigned_to||'Auto'}</td>
+          <td style="font-size:12px;color:var(--text-secondary)">${q.assigned_to||'Auto'}</td>
         </tr>`).join('')}
       </tbody>
     </table></div>
     ${pagination(total, answerPage, 20, 'loadAnswerQueue')}`;
-  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation', 'Error', e.message); }
 }
 
-// ── KNOWLEDGE BASE ────────────────────────────────────────────────
+// ── KNOWLEDGE BASE ─────────────────────────────────────────────────
 async function loadKB(page = 1) {
   const el = document.getElementById('tab-knowledge-base');
   el.innerHTML = `
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Knowledge Base</div>
+    <h1>Knowledge Base</h1>
+    <p>Centralized repository of product specs, manuals, FAQs, and approved responses.</p>
+  </div>
   <div class="tab-bar">
     <button class="tab-btn active" id="kb-tab-list" onclick="switchKBTab('list')">KB Entries</button>
     <button class="tab-btn" id="kb-tab-add" onclick="switchKBTab('add')">Add Entry</button>
-    <button class="tab-btn" id="kb-tab-pdf" onclick="switchKBTab('pdf')">Upload PDF</button>
+    <button class="tab-btn" id="kb-tab-pdf" onclick="switchKBTab('pdf')">Upload PDF Manual</button>
   </div>
   <div id="kb-list-section"></div>
   <div id="kb-add-section" style="display:none"></div>
   <div id="kb-pdf-section" style="display:none"></div>`;
-
   renderKBList(page);
   renderKBAdd();
   renderKBPDF();
@@ -898,29 +1161,32 @@ async function loadKB(page = 1) {
 function switchKBTab(tab) {
   ['list','add','pdf'].forEach(t => {
     document.getElementById(`kb-tab-${t}`)?.classList.toggle('active', t===tab);
-    document.getElementById(`kb-${t}-section`).style.display = t===tab ? '' : 'none';
+    document.getElementById(`kb-${t}-section`).style.display = t===tab?'':'none';
   });
 }
 
 async function renderKBList(page = 1) {
   const el = document.getElementById('kb-list-section');
   el.innerHTML = `
-  <div class="section-header">
-    <div class="section-title">Knowledge Base</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+    <div class="filters" style="margin:0">
+      <div style="position:relative">
+        
+        <input class="form-input" id="kb-search" placeholder="Search knowledge base..." oninput="renderKBList(1)" style="padding-left:30px;width:240px;padding-top:7px;padding-bottom:7px">
+      </div>
+      <select class="form-select" id="kb-cat" onchange="renderKBList(1)">
+        <option value="">All Categories</option>
+        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <select class="form-select" id="kb-src" onchange="renderKBList(1)">
+        <option value="">All Sources</option>
+        <option value="manual">Manual</option><option value="pdf_manual">PDF Manual</option>
+        <option value="approved_answer">Approved Answer</option><option value="product_spec">Product Spec</option>
+      </select>
+    </div>
     <button class="btn btn-secondary btn-sm" onclick="backfillEmbeddings()">🔄 Backfill Embeddings</button>
   </div>
-  <div class="filters">
-    <input class="form-input" id="kb-search" placeholder="Search KB..." oninput="renderKBList(1)" style="width:240px">
-    <select class="form-select" id="kb-cat" onchange="renderKBList(1)">
-      <option value="">All Categories</option>
-      ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
-    </select>
-    <select class="form-select" id="kb-src" onchange="renderKBList(1)">
-      <option value="">All Sources</option><option value="manual">Manual</option><option value="pdf_manual">PDF</option><option value="approved_answer">Approved Answer</option><option value="product_spec">Product Spec</option>
-    </select>
-  </div>
-  <div class="card" id="kb-table-card"><div class="loading">Loading...</div></div>`;
-
+  <div class="card" id="kb-table-card"><div class="loading">⏳ Loading...</div></div>`;
   await refreshKBList(page);
 }
 
@@ -930,61 +1196,58 @@ async function refreshKBList(page = 1) {
   const search = document.getElementById('kb-search')?.value||'';
   const cat = document.getElementById('kb-cat')?.value||'';
   const src = document.getElementById('kb-src')?.value||'';
-
   let url = `/knowledge-base?page=${page}&limit=15`;
   if (search) url += `&search=${encodeURIComponent(search)}`;
-  if (cat) url += `&category=${cat}`;
-  if (src) url += `&source=${src}`;
-
+  if (cat)    url += `&category=${cat}`;
+  if (src)    url += `&source=${src}`;
   try {
     const { data, total } = await apiFetch(url);
-    if (!data?.length) { card.innerHTML = '<div class="empty">No KB entries.</div>'; return; }
-
+    if (!data?.length) { card.innerHTML = emptyState('fa-book-open', 'No KB entries', 'Add entries manually or upload a PDF manual.', 'Add Entry', "switchKBTab('add')"); return; }
     card.innerHTML = `
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Title</th><th>Category</th><th>Source</th><th>Date</th><th>Actions</th></tr></thead>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Title</th><th>Category</th><th>Source</th><th>Date Added</th><th>Actions</th></tr></thead>
       <tbody>${data.map(e=>`
         <tr>
-          <td><div class="truncate" style="max-width:280px">${e.title||'—'}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${(e.content||'').slice(0,80)}...</div></td>
+          <td><div style="font-weight:600;margin-bottom:2px">${e.title||'Untitled'}</div>
+              <div style="font-size:11px;color:var(--text-muted)">${(e.content||'').slice(0,90)}...</div></td>
           <td>${catBadge(e.category)}</td>
-          <td><span class="badge-pill badge-gray">${e.source||'manual'}</span>${e.has_pdf?` <span class="badge-pill badge-blue">PDF</span>`:''}</td>
-          <td style="font-size:12px;color:var(--muted)">${e.created_at?new Date(e.created_at).toLocaleDateString():'—'}</td>
-          <td>
-            ${e.has_pdf && e.pdf_filename ? `<button class="btn btn-secondary btn-sm" onclick="previewPDF('${e.pdf_filename}','${e.pdf_url||''}')">👁 PDF</button>` : ''}
-            <button class="btn btn-danger btn-sm" onclick="deleteKB('${e.id}')">🗑</button>
-          </td>
+          <td><span class="badge-pill badge-gray">${e.source||'manual'}</span>${e.has_pdf?` <span class="badge-pill badge-blue">📄 PDF</span>`:''}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${e.created_at?new Date(e.created_at).toLocaleDateString():'—'}</td>
+          <td><div class="flex gap-2">
+            ${e.has_pdf&&e.pdf_filename?`<button class="btn btn-secondary btn-xs" onclick="previewPDF('${e.pdf_filename}','${e.pdf_url||''}')">👁 PDF</button>`:''}
+            <button class="btn btn-danger btn-xs" onclick="deleteKB('${e.id}')">🗑</button>
+          </div></td>
         </tr>`).join('')}
       </tbody>
     </table></div>
     ${pagination(total, page, 15, 'refreshKBList')}`;
-  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
 }
 
 function renderKBAdd() {
   const el = document.getElementById('kb-add-section');
   el.innerHTML = `
-  <div class="card" style="max-width:600px">
-    <div class="card-title">Add KB Entry</div>
-    <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="kb-title" placeholder="Entry title"></div>
-    <div class="form-group"><label class="form-label">Content</label><textarea class="form-textarea" id="kb-content" style="min-height:120px" placeholder="Knowledge base content..."></textarea></div>
+  <div class="card" style="max-width:640px">
+    <div class="card-title">+ Add KB Entry</div>
+    <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="kb-title" placeholder="Entry title or question"></div>
+    <div class="form-group"><label class="form-label">Content</label><textarea class="form-textarea" id="kb-content" style="min-height:140px" placeholder="Knowledge base content, answer, or policy..."></textarea></div>
     <div class="form-group"><label class="form-label">Category</label>
       <select class="form-select" id="kb-new-cat">
         ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
       </select>
     </div>
-    <button class="btn btn-primary" onclick="saveKBEntry()">Save Entry</button>
+    <button class="btn btn-primary" onclick="saveKBEntry()">💾 Save & Embed</button>
   </div>`;
 }
 
 async function saveKBEntry() {
-  const title   = document.getElementById('kb-title')?.value;
+  const title = document.getElementById('kb-title')?.value;
   const content = document.getElementById('kb-content')?.value;
   const category = document.getElementById('kb-new-cat')?.value;
   if (!content) return toast('Content required','error');
   try {
     await apiFetch('/knowledge-base', { method:'POST', body: JSON.stringify({ title, content, category }) });
-    toast('KB entry saved with embedding','success');
+    toast('KB entry saved with vector embedding','success');
     document.getElementById('kb-content').value = '';
     document.getElementById('kb-title').value = '';
     switchKBTab('list');
@@ -995,23 +1258,21 @@ async function saveKBEntry() {
 function renderKBPDF() {
   const el = document.getElementById('kb-pdf-section');
   el.innerHTML = `
-  <div class="card" style="max-width:600px">
-    <div class="card-title">Upload Product Manual (PDF)</div>
+  <div class="card" style="max-width:640px">
+    <div class="card-title">📄 Upload Product Manual (PDF)</div>
     <div class="form-group">
       <label class="form-label">Category</label>
-      <select class="form-select" id="pdf-cat">
-        ${['product_info','usage','warranty','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
-      </select>
+      <select class="form-select" id="pdf-cat">${['product_info','usage','warranty','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}</select>
     </div>
     <div class="upload-zone" id="pdf-upload-zone" onclick="document.getElementById('pdf-file').click()"
          ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
          ondrop="handlePDFDrop(event)">
-      <div style="font-size:32px">📄</div>
+      <div class="upload-icon">📄</div>
       <p>Click or drag a PDF manual here</p>
-      <p style="font-size:11px;margin-top:4px">Text will be extracted, chunked, and embedded into the KB</p>
+      <div class="upload-hint">Text will be extracted, chunked, and embedded into the knowledge base</div>
     </div>
     <input type="file" id="pdf-file" accept=".pdf" style="display:none" onchange="uploadPDF(this.files[0])">
-    <div id="pdf-result" style="margin-top:12px"></div>
+    <div id="pdf-result" style="margin-top:14px"></div>
   </div>
   <div id="pdf-preview-area"></div>`;
 }
@@ -1025,10 +1286,9 @@ function handlePDFDrop(e) {
 
 async function uploadPDF(file) {
   if (!file) return;
-  const cat = document.getElementById('pdf-cat')?.value || 'product_info';
+  const cat = document.getElementById('pdf-cat')?.value||'product_info';
   const res_el = document.getElementById('pdf-result');
-  res_el.innerHTML = '<div style="color:var(--muted)">⏳ Uploading and extracting text...</div>';
-
+  res_el.innerHTML = '<div style="color:var(--text-muted);display:flex;align-items:center;gap:8px">⏳ Uploading and extracting text...</div>';
   const form = new FormData();
   form.append('pdf', file);
   form.append('category', cat);
@@ -1036,53 +1296,59 @@ async function uploadPDF(file) {
     const res = await fetch(`${API}/knowledge-base/upload-pdf`, { method:'POST', body: form });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
-    res_el.innerHTML = `<div style="color:var(--success)">✅ Stored ${data.chunks_stored} chunks from ${data.total_chars.toLocaleString()} chars</div>`;
+    res_el.innerHTML = `<div style="color:var(--success);display:flex;align-items:center;gap:8px">✅ Stored ${data.chunks_stored} chunks from ${data.total_chars.toLocaleString()} characters</div>`;
     if (data.pdf_url) {
       document.getElementById('pdf-preview-area').innerHTML = `
-      <div class="card" style="margin-top:16px">
-        <div class="card-title">PDF Preview: ${file.name}</div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">👁 PDF Preview: ${file.name}</div>
         <iframe class="pdf-preview" src="${data.pdf_url}"></iframe>
       </div>`;
     }
     await refreshKBList();
-  } catch (e) { res_el.innerHTML = `<div style="color:var(--danger)">Error: ${e.message}</div>`; }
+  } catch (e) { res_el.innerHTML = `<div style="color:var(--danger);display:flex;align-items:center;gap:8px">✕ ${e.message}</div>`; }
 }
 
 function previewPDF(filename, url) {
   const previewUrl = url || `${API}/knowledge-base/pdf/${filename}`;
-  const area = document.getElementById('pdf-preview-area') || document.querySelector('#tab-knowledge-base');
+  const area = document.getElementById('pdf-preview-area') || document.getElementById('kb-list-section');
+  const existing = document.getElementById('pdf-preview-modal');
+  if (existing) existing.remove();
   const div = document.createElement('div');
+  div.id = 'pdf-preview-modal';
   div.className = 'card';
-  div.style.marginTop = '16px';
-  div.innerHTML = `<div class="card-title">PDF Preview: ${filename} <button class="btn btn-secondary btn-sm" onclick="this.parentElement.parentElement.remove()">✕ Close</button></div>
-  <iframe class="pdf-preview" src="${previewUrl}"></iframe>`;
+  div.style.marginTop = '20px';
+  div.innerHTML = `<div class="card-title">📄 ${filename} <button class="btn btn-secondary btn-xs" style="margin-left:auto" onclick="this.closest('#pdf-preview-modal').remove()">✕ Close</button></div><iframe class="pdf-preview" src="${previewUrl}"></iframe>`;
   area.appendChild(div);
 }
 
 async function deleteKB(id) {
   if (!confirm('Delete this KB entry?')) return;
-  try { await apiFetch(`/knowledge-base/${id}`, { method:'DELETE' }); await refreshKBList(); toast('Deleted','success'); }
+  try { await apiFetch(`/knowledge-base/${id}`, { method:'DELETE' }); await refreshKBList(); toast('Entry deleted','success'); }
   catch (e) { toast(e.message,'error'); }
 }
 
 async function backfillEmbeddings() {
   try {
     const r = await apiFetch('/knowledge-base/backfill-embeddings', { method:'POST' });
-    toast(`${r.done}/${r.total} embeddings generated`, 'success');
+    toast(`${r.done}/${r.total} embeddings generated`,'success');
   } catch (e) { toast(e.message,'error'); }
 }
 
-// ── AGENTS ────────────────────────────────────────────────────────
+// ── AGENTS ─────────────────────────────────────────────────────────
 async function loadAgents() {
   const el = document.getElementById('tab-agents');
   el.innerHTML = `
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Agents</div>
+    <h1>Agents</h1>
+    <p>Manage agent workload, assignments, and SLA performance.</p>
+  </div>
   <div class="tab-bar">
     <button class="tab-btn active" id="ag-tab-workload" onclick="switchAgentTab('workload')">Workload</button>
     <button class="tab-btn" id="ag-tab-manage" onclick="switchAgentTab('manage')">Manage Agents</button>
   </div>
-  <div id="ag-workload-section"><div class="loading">Loading...</div></div>
+  <div id="ag-workload-section"><div class="loading">⏳ Loading...</div></div>
   <div id="ag-manage-section" style="display:none"></div>`;
-
   await refreshAgentWorkload();
   renderAgentManage();
 }
@@ -1090,7 +1356,7 @@ async function loadAgents() {
 function switchAgentTab(tab) {
   ['workload','manage'].forEach(t => {
     document.getElementById(`ag-tab-${t}`)?.classList.toggle('active', t===tab);
-    document.getElementById(`ag-${t}-section`).style.display = t===tab ? '' : 'none';
+    document.getElementById(`ag-${t}-section`).style.display = t===tab?'':'none';
   });
 }
 
@@ -1098,23 +1364,23 @@ async function refreshAgentWorkload() {
   const el = document.getElementById('ag-workload-section');
   try {
     const agents = await apiFetch('/agents/workload');
-    if (!agents.length) { el.innerHTML = '<div class="empty">No agents configured.</div>'; return; }
-
-    el.innerHTML = `
-    <div class="agent-grid">
+    if (!agents.length) { el.innerHTML = emptyState('fa-users','No agents configured','Add agents to enable auto-routing and workload tracking.','Add Agent','switchAgentTab(\'manage\')'); return; }
+    el.innerHTML = `<div class="agent-grid">
       ${agents.map(a=>`
       <div class="agent-card">
+        <div class="agent-avatar">${a.name.charAt(0).toUpperCase()}</div>
         <div class="agent-name">${a.name}</div>
-        <div class="agent-role">${a.role} · ${(a.skills||[]).slice(0,2).join(', ')}${a.skills?.length>2?'...':''}</div>
+        <div class="agent-role">${a.role} · ${(a.skills||[]).slice(0,2).join(', ')}${a.skills?.length>2?'…':''}</div>
+        <span class="badge-pill ${a.is_active?'badge-green':'badge-gray'}" style="margin-bottom:8px">${a.is_active?'Active':'Inactive'}</span>
+        ${a.sla_breached>0?`<div style="background:var(--danger-bg);border:1px solid rgba(234,0,30,.2);border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;color:var(--danger);margin-bottom:10px">⚠️ ${a.sla_breached} question${a.sla_breached>1?'s':''} over 24hrs</div>`:''}
         <div class="agent-stats">
           <div class="agent-stat"><div class="val">${a.open_questions}</div><div class="lbl">Open</div></div>
-          <div class="agent-stat"><div class="val">${a.answered_today}</div><div class="lbl">Done Today</div></div>
-          <div class="agent-stat"><div class="val ${a.sla_breached>0?'sla-alert':''}">${a.sla_breached}</div><div class="lbl">SLA Breach</div></div>
+          <div class="agent-stat"><div class="val">${a.answered_today}</div><div class="lbl">Today</div></div>
+          <div class="agent-stat"><div class="val ${a.sla_breached>0?'sla-alert':''}">${a.sla_breached}</div><div class="lbl">SLA</div></div>
         </div>
-        ${a.sla_breached>0?`<div style="margin-top:8px;font-size:11px;color:var(--danger)">⚠️ ${a.sla_breached} question${a.sla_breached>1?'s':''} over 24hrs</div>`:''}
       </div>`).join('')}
     </div>`;
-  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { el.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
 }
 
 async function renderAgentManage() {
@@ -1122,45 +1388,46 @@ async function renderAgentManage() {
   try {
     const agents = await apiFetch('/agents');
     el.innerHTML = `
-    <div class="section-header">
-      <div class="section-title">Manage Agents</div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-primary btn-sm" onclick="showAddAgentForm()">+ Add Agent</button>
     </div>
     <div id="add-agent-form"></div>
     <div class="card">
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Role</th><th>Skills</th><th>Retailers</th><th>Active</th><th>Actions</th></tr></thead>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Name</th><th>Role</th><th>Skills</th><th>Retailers</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>${agents.map(a=>`
         <tr>
-          <td>${a.name}</td>
+          <td><div style="display:flex;align-items:center;gap:10px">
+            <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--primary-dark));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0">${a.name.charAt(0)}</div>
+            <span style="font-weight:600">${a.name}</span>
+          </div></td>
           <td><span class="badge-pill ${a.role==='admin'?'badge-red':a.role==='manager'?'badge-purple':'badge-blue'}">${a.role}</span></td>
-          <td style="font-size:11px;color:var(--muted)">${(a.skills||[]).join(', ')||'—'}</td>
-          <td style="font-size:11px;color:var(--muted)">${(a.retailer_ids||[]).join(', ')||'all'}</td>
+          <td style="font-size:11px;color:var(--text-muted)">${(a.skills||[]).join(', ')||'—'}</td>
+          <td style="font-size:11px;color:var(--text-muted)">${(a.retailer_ids||[]).join(', ')||'all'}</td>
           <td><span class="badge-pill ${a.is_active?'badge-green':'badge-gray'}">${a.is_active?'Active':'Inactive'}</span></td>
-          <td><button class="btn btn-danger btn-sm" onclick="deleteAgent('${a.id}')">🗑</button></td>
+          <td><button class="btn btn-danger btn-xs" onclick="deleteAgent('${a.id}')">🗑</button></td>
         </tr>`).join('')}
       </tbody>
     </table></div></div>`;
-  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { el.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
 }
 
 function showAddAgentForm() {
   const el = document.getElementById('add-agent-form');
   const allSkills = ['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'];
   el.innerHTML = `
-  <div class="card" style="margin-bottom:16px;max-width:500px">
-    <div class="card-title">New Agent</div>
-    <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="new-agent-name"></div>
+  <div class="card" style="margin-bottom:20px;max-width:520px">
+    <div class="card-title">👤+ New Agent</div>
+    <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="new-agent-name" placeholder="Agent full name"></div>
     <div class="form-group"><label class="form-label">Role</label>
       <select class="form-select" id="new-agent-role"><option value="agent">Agent</option><option value="manager">Manager</option></select>
     </div>
-    <div class="form-group"><label class="form-label">Skills (Ctrl+click for multiple)</label>
-      <select class="form-select" id="new-agent-skills" multiple style="height:120px">${allSkills.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+    <div class="form-group"><label class="form-label">Skills <span style="color:var(--text-muted);font-weight:400">(Ctrl+click for multiple)</span></label>
+      <select class="form-select" id="new-agent-skills" multiple style="height:130px">${allSkills.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
     </div>
     <div class="flex gap-2">
-      <button class="btn btn-primary" onclick="createAgent()">Create Agent</button>
-      <button class="btn btn-secondary" onclick="document.getElementById('add-agent-form').innerHTML=''">Cancel</button>
+      <button class="btn btn-primary" onclick="createAgent()">✓ Create Agent</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('add-agent-form').innerHTML=''">✕ Cancel</button>
     </div>
   </div>`;
 }
@@ -1172,7 +1439,7 @@ async function createAgent() {
   if (!name) return toast('Name required','error');
   try {
     await apiFetch('/agents', { method:'POST', body: JSON.stringify({ name, role, skills, retailer_ids:['bestbuy','amazon'] }) });
-    toast('Agent created','success');
+    toast('Agent created successfully','success');
     await renderAgentManage();
   } catch (e) { toast(e.message,'error'); }
 }
@@ -1183,55 +1450,74 @@ async function deleteAgent(id) {
   catch (e) { toast(e.message,'error'); }
 }
 
-// ── SCRAPE LOGS ───────────────────────────────────────────────────
+// ── SCRAPE LOGS ────────────────────────────────────────────────────
 async function loadScrapeLogs() {
   const el = document.getElementById('tab-scrape-logs');
-  el.innerHTML = '<div class="loading">Loading logs...</div>';
+  el.innerHTML = `
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Scrape Logs</div>
+    <h1>Scrape Logs</h1>
+    <p>History of all scraping activity across BestBuy and Amazon.</p>
+  </div>
+  <div class="loading">⏳ Loading logs...</div>`;
   try {
     const logs = await apiFetch('/scrape/logs?limit=100');
-    if (!logs.length) { el.innerHTML = '<div class="empty">No scrape logs yet.</div>'; return; }
+    if (!logs.length) { el.innerHTML += emptyState('fa-list-check','No scrape logs yet','Logs will appear after the first scrape run.'); return; }
+    const errorCount = logs.filter(l=>l.error).length;
+    const newTotal = logs.reduce((s,l)=>s+l.new_count,0);
     el.innerHTML = `
-    <div class="section-header"><div class="section-title">Scrape Logs</div><div style="color:var(--muted);font-size:12px">${logs.length} recent entries</div></div>
+    <div class="page-header">
+      <div class="breadcrumb">🏠<span>/</span>Scrape Logs</div>
+      <h1>Scrape Logs</h1>
+      <p>${logs.length} recent runs · ${newTotal} new questions found · ${errorCount} errors</p>
+    </div>
     ${logs.map(l=>`
     <div class="log-entry ${l.error?'has-error':''}">
-      <span class="log-time">${new Date(l.scraped_at).toLocaleString()}</span>
-      <span class="log-retailer badge-pill ${l.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${l.retailer}</span>
-      <span style="color:var(--text)">${l.product_name}</span>
-      <span class="badge-pill badge-gray">${l.engine_used}</span>
-      <span style="color:var(--muted)">Found: ${l.found_count}</span>
-      <span style="color:var(--success)">New: ${l.new_count}</span>
-      ${l.error?`<span style="color:var(--danger);font-size:11px">Error: ${l.error}</span>`:''}
+      <span class="log-time">🕐 ${new Date(l.scraped_at).toLocaleString()}</span>
+      <span class="badge-pill ${l.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${l.retailer}</span>
+      <span style="font-weight:500">${l.product_name}</span>
+      <span class="badge-pill badge-gray">⚙️ ${l.engine_used}</span>
+      <span style="color:var(--text-secondary)">Found: <strong>${l.found_count}</strong></span>
+      <span style="color:var(--success)">New: <strong>${l.new_count}</strong></span>
+      ${l.error?`<span style="color:var(--danger);font-size:11px">✕ ${l.error}</span>`:'<span style="color:var(--success);font-size:11px">✅ OK</span>'}
     </div>`).join('')}`;
-  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { el.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
 }
 
-// ── POST ANSWERS ──────────────────────────────────────────────────
+// ── POST ANSWERS ───────────────────────────────────────────────────
 async function loadPostAnswers() {
   const el = document.getElementById('tab-post-answers');
+  el.innerHTML = `
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Post Answers</div>
+    <h1>Post Answers</h1>
+    <p>Post approved answers back to retailer platforms. Disabled by default for PoC.</p>
+  </div>`;
   try {
     const cfg = await apiFetch('/post-answers/config');
     const posting_enabled = cfg.posting_enabled;
-
-    el.innerHTML = `
-    <div class="card" style="max-width:600px;margin-bottom:20px">
-      <div class="card-title">Post Answers to Retailer Sites</div>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+    el.innerHTML += `
+    <div class="card" style="max-width:640px;margin-bottom:20px">
+      <div class="card-title">📤 Posting Configuration</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
         <label class="toggle-switch"><input type="checkbox" ${posting_enabled?'checked':''} onchange="togglePosting(this.checked)"><span class="toggle-slider"></span></label>
-        <span style="font-size:13px">${posting_enabled ? '<span style="color:var(--success)">Posting Enabled</span>' : '<span style="color:var(--muted)">Posting Disabled (PoC Mode)</span>'}</span>
+        <div>
+          <div style="font-weight:600;font-size:14px">${posting_enabled?'<span style="color:var(--success)">Posting Enabled</span>':'Posting Disabled'}</div>
+          <div style="font-size:12px;color:var(--text-muted)">PoC Mode — off by default</div>
+        </div>
       </div>
-      <p style="font-size:12px;color:var(--muted)">When enabled, approved answers can be posted back to BestBuy and Amazon. This feature is disabled by default for PoC demonstration purposes.</p>
-      ${!posting_enabled ? '<div style="margin-top:10px;padding:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius);font-size:12px;color:var(--warning)">⚠️ Enable posting to allow answers to be submitted to retailer platforms.</div>' : ''}
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.6">When enabled, approved answers can be submitted back to BestBuy and Amazon product pages. This feature is disabled by default for the PoC demonstration.</p>
+      ${!posting_enabled?`<div style="margin-top:14px;padding:12px 14px;background:var(--warning-bg);border:1px solid rgba(221,122,1,.3);border-radius:var(--radius-sm);font-size:12px;color:var(--warning);display:flex;align-items:center;gap:8px">⚠️ Enable the toggle above to allow answers to be posted to retailer platforms.</div>`:''}
     </div>
-    <div class="card" id="post-queue-card"><div class="loading">Loading answered questions...</div></div>`;
-
+    <div class="card" id="post-queue-card"><div class="loading">⏳ Loading answered questions...</div></div>`;
     await refreshPostQueue();
-  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { el.innerHTML += emptyState('fa-circle-exclamation','Error',e.message); }
 }
 
 async function togglePosting(enabled) {
   try {
     await apiFetch('/post-answers/toggle', { method:'POST', body: JSON.stringify({ enabled }) });
-    toast(enabled ? 'Posting enabled' : 'Posting disabled', 'success');
+    toast(enabled?'Posting enabled':'Posting disabled','success');
     await loadPostAnswers();
   } catch (e) { toast(e.message,'error'); }
 }
@@ -1241,123 +1527,144 @@ async function refreshPostQueue() {
   if (!card) return;
   try {
     const { data } = await apiFetch('/questions?status=answered&limit=20');
-    if (!data?.length) { card.innerHTML = '<div class="empty">No answered questions to post.</div>'; return; }
-
+    if (!data?.length) { card.innerHTML = emptyState('fa-paper-plane','No answered questions to post','Questions will appear here once approved.'); return; }
     card.innerHTML = `
-    <div class="card-title">Answered Questions — Post Queue</div>
-    <div class="table-wrap">
-    <table>
+    <div class="card-title">📋 Answered Questions — Post Queue</div>
+    <div class="table-wrap"><table>
       <thead><tr><th>Question</th><th>Retailer</th><th>Date Answered</th><th>Posted</th><th>Action</th></tr></thead>
       <tbody>${data.map(q=>`
         <tr>
-          <td class="truncate" style="max-width:260px">${q.question_text}</td>
+          <td class="truncate" style="max-width:260px;font-weight:500">${q.question_text}</td>
           <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
-          <td style="font-size:12px;color:var(--muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
-          <td>${q.posted_to_retailer?'<span class="badge-pill badge-green">Posted</span>':'<span class="badge-pill badge-gray">Not Posted</span>'}</td>
-          <td>${!q.posted_to_retailer?`<button class="btn btn-primary btn-sm" onclick="postAnswer('${q.id}')">📤 Post</button>`:'—'}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
+          <td>${q.posted_to_retailer?'<span class="badge-pill badge-green">✓ Posted</span>':'<span class="badge-pill badge-gray">Not Posted</span>'}</td>
+          <td>${!q.posted_to_retailer?`<button class="btn btn-primary btn-xs" onclick="postAnswer('${q.id}')">📤 Post</button>`:'—'}</td>
         </tr>`).join('')}
       </tbody>
     </table></div>`;
-  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
 }
 
 async function postAnswer(id) {
-  try {
-    const r = await apiFetch(`/post-answers/${id}`, { method:'POST' });
-    toast(r.message || 'Posted', 'success');
-    await refreshPostQueue();
-  } catch (e) { toast(e.message,'error'); }
+  try { const r = await apiFetch(`/post-answers/${id}`, { method:'POST' }); toast(r.message||'Posted','success'); await refreshPostQueue(); }
+  catch (e) { toast(e.message,'error'); }
 }
 
-// ── CONFIG ────────────────────────────────────────────────────────
+// ── CONFIG ─────────────────────────────────────────────────────────
 async function loadConfig_tab() {
   const el = document.getElementById('tab-config');
-  el.innerHTML = '<div class="loading">Loading configuration...</div>';
+  el.innerHTML = `
+  <div class="page-header">
+    <div class="breadcrumb">🏠<span>/</span>Configuration</div>
+    <h1>Configuration</h1>
+    <p>App settings, API connection, scraping schedule, and theme preferences.</p>
+  </div>
+  <div class="loading">⏳ Loading...</div>`;
   try {
     const cfg = await apiFetch('/config');
     const sc = cfg.scraping_config || {};
     const savedApiUrl = localStorage.getItem('cqm_api_url') || '';
-    const savedTheme  = localStorage.getItem('cqm_theme') || 'dark';
+    const savedTheme  = localStorage.getItem('cqm_theme') || 'light';
     el.innerHTML = `
-    <div class="card" style="max-width:500px;margin-bottom:16px">
-      <div class="card-title">App Settings</div>
-      <div class="form-group">
-        <label class="form-label">Backend API URL</label>
-        <input class="form-input" id="cfg-api-url" value="${savedApiUrl}" placeholder="https://your-app.onrender.com/api">
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">Your Render backend URL. Stored in browser only.</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Theme</label>
-        <select class="form-select" id="cfg-theme">
-          <option value="dark" ${savedTheme==='dark'?'selected':''}>🌙 Dark Mode</option>
-          <option value="light" ${savedTheme==='light'?'selected':''}>☀️ Light Mode</option>
-        </select>
-      </div>
-      <button class="btn btn-primary" onclick="saveAppSettings()">Save App Settings</button>
+    <div class="page-header">
+      <div class="breadcrumb">🏠<span>/</span>Configuration</div>
+      <h1>Configuration</h1>
+      <p>App settings, API connection, scraping schedule, and theme preferences.</p>
     </div>
-    <div class="card" style="max-width:500px">
-      <div class="card-title">Scraping Configuration</div>
-      <div class="form-group">
-        <label class="form-label">Scraping Engine</label>
-        <select class="form-select" id="cfg-engine">
-          <option value="scraperapi" ${sc.engine==='scraperapi'?'selected':''}>ScraperAPI (Free 1000/month)</option>
-          <option value="apify" ${sc.engine==='apify'?'selected':''}>Apify (Leadership Demo)</option>
-        </select>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:900px">
+      <div class="card">
+        <div class="card-title">🔌 App Settings</div>
+        <div class="form-group">
+          <label class="form-label">Backend API URL</label>
+          <input class="form-input" id="cfg-api-url" value="${savedApiUrl}" placeholder="https://your-app.onrender.com/api">
+          <div class="form-hint">Your Render backend URL. Stored in browser — no redeployment needed.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Theme</label>
+          <select class="form-select" id="cfg-theme">
+            <option value="light" ${savedTheme==='light'?'selected':''}>☀️ Light Mode</option>
+            <option value="dark" ${savedTheme==='dark'?'selected':''}>🌙 Dark Mode</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="saveAppSettings()">💾 Save App Settings</button>
       </div>
-      <div class="form-group">
-        <label class="form-label">Auto-Scrape Interval (minutes, min 5)</label>
-        <input class="form-input" type="number" id="cfg-interval" value="${sc.interval_minutes||10}" min="5">
+      <div class="card">
+        <div class="card-title">🕷 Scraping Configuration</div>
+        <div class="form-group">
+          <label class="form-label">Scraping Engine</label>
+          <select class="form-select" id="cfg-engine">
+            <option value="scraperapi" ${sc.engine==='scraperapi'?'selected':''}>ScraperAPI (Free 1,000/month)</option>
+            <option value="apify" ${sc.engine==='apify'?'selected':''}>Apify (Leadership Demo)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Auto-Scrape Interval (minutes, min 5)</label>
+          <input class="form-input" type="number" id="cfg-interval" value="${sc.interval_minutes||10}" min="5">
+        </div>
+        <div class="form-group" style="display:flex;align-items:center;gap:12px">
+          <label class="toggle-switch"><input type="checkbox" id="cfg-auto" ${sc.auto_enabled?'checked':''}><span class="toggle-slider"></span></label>
+          <span class="form-label" style="margin:0">Auto-scraping enabled</span>
+        </div>
+        <button class="btn btn-primary" onclick="saveConfig()">💾 Save Scraping Config</button>
       </div>
-      <div class="form-group" style="display:flex;align-items:center;gap:12px">
-        <label class="toggle-switch"><input type="checkbox" id="cfg-auto" ${sc.auto_enabled?'checked':''}><span class="toggle-slider"></span></label>
-        <span class="form-label" style="margin:0">Auto-scraping enabled</span>
-      </div>
-      <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
     </div>`;
-  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+  } catch (e) { el.innerHTML += emptyState('fa-circle-exclamation','Error',e.message); }
 }
 
 function saveAppSettings() {
-  const apiUrl = document.getElementById("cfg-api-url")?.value?.trim();
-  const theme  = document.getElementById("cfg-theme")?.value || "dark";
+  const apiUrl = document.getElementById('cfg-api-url')?.value?.trim();
+  const theme  = document.getElementById('cfg-theme')?.value || 'light';
   if (apiUrl) {
-    const url = apiUrl.endsWith("/api") ? apiUrl : apiUrl.replace(/\/$/, "") + "/api";
-    localStorage.setItem("cqm_api_url", url);
+    const url = apiUrl.endsWith('/api') ? apiUrl : apiUrl.replace(/\/$/, '') + '/api';
+    localStorage.setItem('cqm_api_url', url);
     API = url;
   }
   applyTheme(theme);
-  toast("App settings saved", "success");
+  toast('App settings saved','success');
   setTimeout(() => location.reload(), 800);
 }
 
 async function saveConfig() {
   const engine = document.getElementById('cfg-engine')?.value;
-  const interval_minutes = parseInt(document.getElementById('cfg-interval')?.value) || 10;
-  const auto_enabled = document.getElementById('cfg-auto')?.checked || false;
+  const interval_minutes = parseInt(document.getElementById('cfg-interval')?.value)||10;
+  const auto_enabled = document.getElementById('cfg-auto')?.checked||false;
   try {
     await apiFetch('/scrape/config', { method:'POST', body: JSON.stringify({ engine, interval_minutes, auto_enabled }) });
     scrapingConfig = { engine, interval_minutes, auto_enabled };
     setEngineUI(engine);
     document.getElementById('auto-toggle').checked = auto_enabled;
-    toast('Configuration saved', 'success');
+    toast('Scraping configuration saved','success');
   } catch (e) { toast(e.message,'error'); }
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────
+// ── HELPERS ────────────────────────────────────────────────────────
 function catBadge(cat) {
-  const colors = { product_info:'badge-blue', pricing:'badge-green', warranty:'badge-purple', compatibility:'badge-info', usage:'badge-blue', complaints:'badge-red', returns:'badge-orange', other:'badge-gray' };
-  return cat ? `<span class="badge-pill ${colors[cat]||'badge-gray'}">${cat}</span>` : '—';
+  const map = { product_info:'badge-blue', pricing:'badge-green', warranty:'badge-purple', compatibility:'badge-blue', usage:'badge-orange', complaints:'badge-red', returns:'badge-yellow', other:'badge-gray' };
+  return cat ? `<span class="badge-pill ${map[cat]||'badge-gray'}">${cat.replace('_',' ')}</span>` : '—';
 }
 
 function sentBadge(s) {
   const map = { positive:'badge-green', neutral:'badge-gray', negative:'badge-red' };
-  return s ? `<span class="badge-pill ${map[s]||'badge-gray'}">${s}</span>` : '—';
+  const icons = { positive:'fa-face-smile', neutral:'fa-face-meh', negative:'fa-face-frown' };
+  return s ? `<span class="badge-pill ${map[s]||'badge-gray'}"> ${s}</span>` : '—';
 }
 
 function confidenceBadge(c) {
   if (c == null) return '—';
   const color = c >= 70 ? 'var(--success)' : c >= 40 ? 'var(--warning)' : 'var(--danger)';
-  return `<div style="min-width:60px"><span style="color:${color};font-weight:700">${c}%</span><div class="confidence-bar"><div class="confidence-fill" style="width:${c}%;background:${color}"></div></div></div>`;
+  return `<div style="min-width:64px">
+    <span style="color:${color};font-weight:700;font-size:13px">${c}%</span>
+    <div class="confidence-bar"><div class="confidence-fill" style="width:${c}%;background:${color}"></div></div>
+  </div>`;
+}
+
+function emptyState(icon, title, subtitle, btnLabel, btnFn) {
+  return `<div class="empty">
+    <div class="empty-icon"></div>
+    <div class="empty-title">${title}</div>
+    <div class="empty-sub">${subtitle||''}</div>
+    ${btnLabel ? `<button class="btn btn-primary btn-sm" onclick="${btnFn}">+ ${btnLabel}</button>` : ''}
+  </div>`;
 }
 
 function pagination(total, page, limit, fn) {
@@ -1367,7 +1674,7 @@ function pagination(total, page, limit, fn) {
   for (let i = 1; i <= Math.min(pages, 7); i++) {
     btns.push(`<button class="page-btn ${i===page?'active':''}" onclick="${fn}(${i})">${i}</button>`);
   }
-  return `<div class="pagination">${btns.join('')}<span style="font-size:12px;color:var(--muted)">${total} total</span></div>`;
+  return `<div class="pagination">${btns.join('')}<span style="font-size:12px;color:var(--text-muted);margin-left:4px">${total} total</span></div>`;
 }
 </script>
 </body>
