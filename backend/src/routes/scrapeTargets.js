@@ -4,16 +4,18 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const supabase = require('../utils/supabase');
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 // GET all scrape targets
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase
-    .from('scrape_targets')
-    .select('*')
-    .order('added_at', { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    const { data, error } = await supabase.from('scrape_targets').select('*').order('added_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  } catch (err) {
+    console.error('[scrapeTargets.GET /]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST upload Excel
@@ -21,7 +23,17 @@ router.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    let workbook;
+    try {
+      workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    } catch (parseErr) {
+      return res.status(400).json({ error: 'Invalid Excel file. Please upload a valid .xlsx or .xls file.' });
+    }
+
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      return res.status(400).json({ error: 'Excel file has no sheets' });
+    }
+
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
 
@@ -34,8 +46,9 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         is_active: r.active?.toString().toLowerCase() !== 'no'
       }));
 
-    if (targets.length === 0)
+    if (targets.length === 0) {
       return res.status(400).json({ error: 'No valid rows found. Check columns: retailer, product_name, url, active' });
+    }
 
     const { data, error } = await supabase
       .from('scrape_targets')
@@ -45,47 +58,58 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     res.json({ inserted: data.length, targets: data });
   } catch (err) {
+    console.error('[scrapeTargets.POST /upload]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET download Excel template
 router.get('/template', (req, res) => {
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([
-    ['retailer', 'product_name', 'url', 'active'],
-    ['bestbuy', 'Hisense 55" U6 Series MiniLED TV', 'https://www.bestbuy.com/site/...', 'yes'],
-    ['bestbuy', 'Hisense 65" U8 Series MiniLED TV', 'https://www.bestbuy.com/site/...', 'yes'],
-    ['amazon',  'Hisense 55" U6 Series MiniLED TV', 'https://www.amazon.com/dp/...',    'yes'],
-    ['amazon',  'Hisense 65" U8 Series MiniLED TV', 'https://www.amazon.com/dp/...',    'yes']
-  ]);
-  ws['!cols'] = [{ wch: 12 }, { wch: 40 }, { wch: 60 }, { wch: 8 }];
-  XLSX.utils.book_append_sheet(wb, ws, 'Scrape Targets');
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-  res.setHeader('Content-Disposition', 'attachment; filename="cqm_scrape_targets_template.xlsx"');
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.send(buf);
+  try {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['retailer', 'product_name', 'url', 'active'],
+      ['bestbuy', 'Hisense 55" U6 Series MiniLED TV', 'https://www.bestbuy.com/site/...', 'yes'],
+      ['bestbuy', 'Hisense 65" U8 Series MiniLED TV', 'https://www.bestbuy.com/site/...', 'yes'],
+      ['amazon',  'Hisense 55" U6 Series MiniLED TV', 'https://www.amazon.com/dp/...',    'yes'],
+      ['amazon',  'Hisense 65" U8 Series MiniLED TV', 'https://www.amazon.com/dp/...',    'yes']
+    ]);
+    ws['!cols'] = [{ wch: 12 }, { wch: 40 }, { wch: 60 }, { wch: 8 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Scrape Targets');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', 'attachment; filename="cqm_scrape_targets_template.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (err) {
+    console.error('[scrapeTargets.GET /template]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PATCH activate/deactivate/edit
 router.patch('/:id', async (req, res) => {
-  const { id } = req.params;
-  const updates = req.body;
-  const { data, error } = await supabase
-    .from('scrape_targets')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    const { data, error } = await supabase
+      .from('scrape_targets').update(req.body).eq('id', req.params.id).select().single();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: 'Scrape target not found' });
+    res.json(data);
+  } catch (err) {
+    console.error('[scrapeTargets.PATCH /:id]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // DELETE target
 router.delete('/:id', async (req, res) => {
-  const { error } = await supabase.from('scrape_targets').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true });
+  try {
+    const { error } = await supabase.from('scrape_targets').delete().eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[scrapeTargets.DELETE /:id]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

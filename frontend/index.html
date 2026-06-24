@@ -493,8 +493,21 @@ tbody tr:hover td { background: var(--primary-light); }
 
 <script>
 // ================================================================
-// CQM v2 — Frontend JS (all logic preserved, visual layer replaced)
+// CQM v2 — Frontend JS
 // ================================================================
+
+// Global error boundary — catch any uncaught JS errors
+window.addEventListener('error', (e) => {
+  console.error('Uncaught error:', e.error || e.message);
+  try { toast('Unexpected error: ' + (e.message || 'Unknown error'), 'error'); } catch(ex) {}
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Unhandled promise rejection:', e.reason);
+  const msg = e.reason?.message || String(e.reason) || 'Unknown error';
+  try { toast('Error: ' + msg, 'error'); } catch(ex) {}
+  e.preventDefault(); // Prevent "Uncaught" in console
+});
 
 function getAPI() {
   return (localStorage.getItem('cqm_api_url') || 'https://cqm-v2-backend.onrender.com/api').replace(/\/$/, '');
@@ -522,13 +535,21 @@ function toggleTheme() {
 
 // ── INIT ───────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
-  applyTheme(localStorage.getItem('cqm_theme') || 'light');
-  if (!localStorage.getItem('cqm_api_url')) showApiSetup();
-  await loadConfig();
-  await checkHealth();
-  showTab('dashboard');
-  setInterval(checkHealth, 30000);
-  setInterval(() => { if (currentTab === 'review-queue') loadReviewQueue(); }, 60000);
+  try { applyTheme(localStorage.getItem('cqm_theme') || 'light'); } catch(e) { console.error('Theme error:', e); }
+  try { if (!localStorage.getItem('cqm_api_url')) showApiSetup(); } catch(e) { console.error('API setup error:', e); }
+  try { await loadConfig(); } catch(e) { console.warn('Config load failed (non-fatal):', e.message); }
+  try { await checkHealth(); } catch(e) { console.warn('Health check failed (non-fatal):', e.message); }
+  try {
+    showTab('dashboard');
+  } catch(e) {
+    console.error('showTab failed:', e);
+    // Last resort: show content area anyway
+    document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+    const dash = document.getElementById('tab-dashboard');
+    if (dash) { dash.style.display = ''; dash.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Dashboard failed to load</div><div class="empty-sub">Please check your API URL in Configuration.</div></div>'; }
+  }
+  setInterval(() => { try { checkHealth(); } catch(e) {} }, 30000);
+  setInterval(() => { try { if (currentTab === 'review-queue') loadReviewQueue(); } catch(e) {} }, 60000);
 });
 
 function showApiSetup() {
@@ -560,12 +581,14 @@ function saveApiUrl() {
 
 // ── TOAST ──────────────────────────────────────────────────────────
 function toast(msg, type = 'info') {
-  const icons = { success: 'fa-circle-check', error: 'fa-circle-xmark', info: 'fa-circle-info' };
-  const t = document.getElementById('toast');
-  t.innerHTML = ` ${msg}`;
-  t.className = `toast show ${type}`;
-  clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+  try {
+    const t = document.getElementById('toast');
+    if (!t) return console.log(`[toast:${type}] ${msg}`);
+    t.innerHTML = msg;
+    t.className = `toast show ${type}`;
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => { try { t.classList.remove('show'); } catch(e){} }, 3500);
+  } catch(e) { console.error('Toast error:', e); }
 }
 
 // ── HEALTH ─────────────────────────────────────────────────────────
@@ -593,24 +616,35 @@ function updateReviewBadge(count) {
 
 // ── API HELPER ─────────────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+  if (!API) throw new Error('API URL not configured. Go to Configuration and set your backend URL.');
+  try {
+    const res = await fetch(API + path, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      ...options
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `HTTP ${res.status}: ${res.statusText}`);
+    }
+    return res.json();
+  } catch(e) {
+    if (e.message.includes('Failed to fetch') || e.message.includes('NetworkError')) {
+      throw new Error('Cannot reach backend. Check your API URL in Configuration or verify the backend is running.');
+    }
+    throw e;
   }
-  return res.json();
 }
 
 // ── TAB NAVIGATION ─────────────────────────────────────────────────
 function showTab(tab) {
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
-  document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
-  document.getElementById(`tab-${tab}`).style.display = '';
-  currentTab = tab;
+  try {
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+    document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+    const tabEl = document.getElementById(`tab-${tab}`);
+    if (!tabEl) { console.error(`Tab element not found: tab-${tab}`); return; }
+    tabEl.style.display = '';
+    currentTab = tab;
   const titles = {
     'dashboard':'Dashboard','scrape-targets':'Scrape Targets','review-queue':'Review Queue',
     'answer-queue':'Answered Questions','knowledge-base':'Knowledge Base','agents':'Agents',
@@ -637,9 +671,13 @@ async function loadConfig() {
   try {
     const cfg = await apiFetch('/config');
     scrapingConfig = cfg.scraping_config || scrapingConfig;
-    document.getElementById('auto-toggle').checked = scrapingConfig.auto_enabled;
+    const autoToggle = document.getElementById('auto-toggle');
+    if (autoToggle) autoToggle.checked = scrapingConfig.auto_enabled;
     setEngineUI(scrapingConfig.engine || 'scraperapi');
-  } catch {}
+  } catch(e) {
+    console.warn('loadConfig failed:', e.message);
+    // Non-fatal: use defaults
+  }
 }
 
 function setEngineUI(engine) {
@@ -648,9 +686,12 @@ function setEngineUI(engine) {
 }
 
 async function setEngine(engine) {
-  scrapingConfig.engine = engine;
-  setEngineUI(engine);
-  await saveScrapingConfig();
+  try {
+    scrapingConfig.engine = engine;
+    setEngineUI(engine);
+    await saveScrapingConfig();
+    toast(`Engine switched to ${engine}`, 'success');
+  } catch(e) { toast('Failed to save engine: ' + e.message, 'error'); setEngineUI(scrapingConfig.engine || 'scraperapi'); }
 }
 
 async function toggleAuto(enabled) {
@@ -910,8 +951,13 @@ async function refreshTargets() {
 }
 
 async function toggleTarget(id, active) {
-  try { await apiFetch(`/scrape-targets/${id}`, { method:'PATCH', body: JSON.stringify({ is_active: active }) }); }
-  catch (e) { toast(e.message,'error'); }
+  try {
+    await apiFetch(`/scrape-targets/${id}`, { method:'PATCH', body: JSON.stringify({ is_active: active }) });
+    toast(`Target ${active ? 'activated' : 'deactivated'}`, 'success');
+  } catch(e) {
+    toast('Failed to update target: ' + e.message, 'error');
+    await refreshTargets(); // Revert toggle in UI
+  }
 }
 
 async function deleteTarget(id) {
@@ -1051,19 +1097,24 @@ function toggleExpand(id) {
 
 async function saveDraft(id) {
   const answer = document.getElementById(`draft-${id}`)?.value;
-  try { await apiFetch(`/questions/${id}/draft`, { method:'PATCH', body: JSON.stringify({ answer }) }); toast('Draft saved','success'); }
-  catch (e) { toast(e.message,'error'); }
+  if (answer === undefined) return toast('Draft field not found', 'error');
+  try {
+    await apiFetch(`/questions/${id}/draft`, { method:'PATCH', body: JSON.stringify({ answer }) });
+    toast('Draft saved','success');
+  } catch(e) { toast('Save draft failed: ' + e.message, 'error'); }
 }
 
 async function approveQuestion(id, addToKB) {
   const answer = document.getElementById(`draft-${id}`)?.value;
   try {
     await apiFetch(`/questions/${id}/approve`, { method:'PATCH', body: JSON.stringify({ answer, add_to_kb: addToKB }) });
-    toast(addToKB?'Approved & added to KB':'Approved successfully','success');
+    toast(addToKB ? 'Approved & added to Knowledge Base' : 'Answer approved successfully', 'success');
     document.getElementById(`row-${id}`)?.remove();
     document.getElementById(`expand-${id}`)?.remove();
-    checkHealth();
-  } catch (e) { toast(e.message,'error'); }
+    try { checkHealth(); } catch(e) {}
+    // Refresh badge count
+    try { const {total} = await apiFetch('/questions?status=review&limit=1'); updateReviewBadge(total||0); } catch(e) {}
+  } catch(e) { toast('Approval failed: ' + e.message, 'error'); }
 }
 
 async function reassign(id) {
@@ -1247,12 +1298,14 @@ async function saveKBEntry() {
   if (!content) return toast('Content required','error');
   try {
     await apiFetch('/knowledge-base', { method:'POST', body: JSON.stringify({ title, content, category }) });
-    toast('KB entry saved with vector embedding','success');
-    document.getElementById('kb-content').value = '';
-    document.getElementById('kb-title').value = '';
+    toast('KB entry saved with vector embedding', 'success');
+    const titleEl = document.getElementById('kb-title');
+    const contentEl = document.getElementById('kb-content');
+    if (titleEl) titleEl.value = '';
+    if (contentEl) contentEl.value = '';
     switchKBTab('list');
     await refreshKBList();
-  } catch (e) { toast(e.message,'error'); }
+  } catch(e) { toast('Failed to save KB entry: ' + e.message, 'error'); }
 }
 
 function renderKBPDF() {
@@ -1329,9 +1382,10 @@ async function deleteKB(id) {
 
 async function backfillEmbeddings() {
   try {
+    toast('Generating embeddings...', 'info');
     const r = await apiFetch('/knowledge-base/backfill-embeddings', { method:'POST' });
-    toast(`${r.done}/${r.total} embeddings generated`,'success');
-  } catch (e) { toast(e.message,'error'); }
+    toast(`${r.done} of ${r.total} embeddings generated`, r.done > 0 ? 'success' : 'info');
+  } catch(e) { toast('Backfill failed: ' + e.message, 'error'); }
 }
 
 // ── AGENTS ─────────────────────────────────────────────────────────
@@ -1439,9 +1493,10 @@ async function createAgent() {
   if (!name) return toast('Name required','error');
   try {
     await apiFetch('/agents', { method:'POST', body: JSON.stringify({ name, role, skills, retailer_ids:['bestbuy','amazon'] }) });
-    toast('Agent created successfully','success');
+    toast('Agent created successfully', 'success');
+    document.getElementById('add-agent-form').innerHTML = '';
     await renderAgentManage();
-  } catch (e) { toast(e.message,'error'); }
+  } catch(e) { toast('Failed to create agent: ' + e.message, 'error'); }
 }
 
 async function deleteAgent(id) {
@@ -1517,9 +1572,9 @@ async function loadPostAnswers() {
 async function togglePosting(enabled) {
   try {
     await apiFetch('/post-answers/toggle', { method:'POST', body: JSON.stringify({ enabled }) });
-    toast(enabled?'Posting enabled':'Posting disabled','success');
+    toast(enabled ? 'Posting to retailer sites enabled' : 'Posting disabled (PoC mode)', 'success');
     await loadPostAnswers();
-  } catch (e) { toast(e.message,'error'); }
+  } catch(e) { toast('Failed to toggle posting: ' + e.message, 'error'); }
 }
 
 async function refreshPostQueue() {
@@ -1612,16 +1667,22 @@ async function loadConfig_tab() {
 }
 
 function saveAppSettings() {
-  const apiUrl = document.getElementById('cfg-api-url')?.value?.trim();
-  const theme  = document.getElementById('cfg-theme')?.value || 'light';
-  if (apiUrl) {
-    const url = apiUrl.endsWith('/api') ? apiUrl : apiUrl.replace(/\/$/, '') + '/api';
-    localStorage.setItem('cqm_api_url', url);
-    API = url;
-  }
-  applyTheme(theme);
-  toast('App settings saved','success');
-  setTimeout(() => location.reload(), 800);
+  try {
+    const apiUrl = document.getElementById('cfg-api-url')?.value?.trim();
+    const theme  = document.getElementById('cfg-theme')?.value || 'light';
+    if (apiUrl) {
+      if (!apiUrl.startsWith('http')) return toast('API URL must start with http:// or https://', 'error');
+      const url = apiUrl.endsWith('/api') ? apiUrl : apiUrl.replace(/\/$/, '') + '/api';
+      localStorage.setItem('cqm_api_url', url);
+      API = url;
+      toast('API URL saved — reloading...', 'success');
+    } else {
+      toast('Please enter a backend API URL', 'error');
+      return;
+    }
+    applyTheme(theme);
+    setTimeout(() => location.reload(), 800);
+  } catch(e) { toast('Failed to save settings: ' + e.message, 'error'); }
 }
 
 async function saveConfig() {
@@ -1632,9 +1693,10 @@ async function saveConfig() {
     await apiFetch('/scrape/config', { method:'POST', body: JSON.stringify({ engine, interval_minutes, auto_enabled }) });
     scrapingConfig = { engine, interval_minutes, auto_enabled };
     setEngineUI(engine);
-    document.getElementById('auto-toggle').checked = auto_enabled;
-    toast('Scraping configuration saved','success');
-  } catch (e) { toast(e.message,'error'); }
+    const autoToggle = document.getElementById('auto-toggle');
+    if (autoToggle) autoToggle.checked = auto_enabled;
+    toast('Scraping configuration saved', 'success');
+  } catch(e) { toast('Failed to save config: ' + e.message, 'error'); }
 }
 
 // ── HELPERS ────────────────────────────────────────────────────
