@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Customer Query Management — Hisense PoC</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:       #0f1117;
+  --surface:  #181c24;
+  --card:     #1e2330;
+  --border:   #2a3042;
+  --accent:   #e8502a;
+  --accent2:  #f07d5a;
+  --text:     #e8eaf0;
+  --muted:    #8892a4;
+  --success:  #22c55e;
+  --warning:  #f59e0b;
+  --danger:   #ef4444;
+  --info:     #3b82f6;
+  --radius:   8px;
+  --font:     'Inter', system-ui, sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px}
+
+/* ── LAYOUT ───────────────────────────────────────────────────── */
+#app{display:flex;height:100vh;overflow:hidden}
+#sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#topbar{height:56px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:16px;flex-shrink:0}
+#content{flex:1;overflow-y:auto;padding:24px}
+
+/* ── SIDEBAR ──────────────────────────────────────────────────── */
+.sidebar-logo{padding:20px 16px;border-bottom:1px solid var(--border)}
+.sidebar-logo .brand{font-size:11px;font-weight:700;letter-spacing:0.12em;color:var(--accent);text-transform:uppercase}
+.sidebar-logo .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.sidebar-logo .hisense{font-size:10px;color:var(--muted);margin-top:4px;opacity:.7}
+nav{flex:1;padding:8px 0;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-radius:0;transition:background .15s;color:var(--muted);font-size:13px;font-weight:500;position:relative;text-decoration:none}
+.nav-item:hover{background:var(--card);color:var(--text)}
+.nav-item.active{background:var(--card);color:var(--text);border-left:3px solid var(--accent)}
+.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.badge{background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:10px;margin-left:auto}
+.sidebar-bottom{padding:16px;border-top:1px solid var(--border)}
+
+/* ── TOPBAR ───────────────────────────────────────────────────── */
+#topbar h1{font-size:15px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role-selector{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.role-selector select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:var(--radius);font-size:12px;cursor:pointer}
+.scraping-controls{display:flex;align-items:center;gap:10px;margin-left:auto}
+.toggle-group{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.toggle-switch{position:relative;width:36px;height:20px}
+.toggle-switch input{opacity:0;width:0;height:0}
+.toggle-slider{position:absolute;inset:0;background:#374151;border-radius:20px;cursor:pointer;transition:.3s}
+.toggle-slider:before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s}
+.toggle-switch input:checked + .toggle-slider{background:var(--accent)}
+.toggle-switch input:checked + .toggle-slider:before{transform:translateX(16px)}
+.engine-toggle{display:flex;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;font-size:11px}
+.engine-btn{padding:5px 10px;cursor:pointer;color:var(--muted);transition:all .2s;border:none;background:none;font-size:11px;font-weight:600}
+.engine-btn.active{background:var(--accent);color:#fff}
+
+/* ── CARDS & PANELS ───────────────────────────────────────────── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px}
+.card-title{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:16px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.stat-value{font-size:28px;font-weight:700;line-height:1}
+.stat-label{font-size:11px;color:var(--muted);margin-top:4px;font-weight:500}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:6px}
+.stat-card.accent .stat-value{color:var(--accent)}
+.stat-card.success .stat-value{color:var(--success)}
+.stat-card.warning .stat-value{color:var(--warning)}
+.stat-card.danger .stat-value{color:var(--danger)}
+.stat-card.info .stat-value{color:var(--info)}
+
+/* ── TABLES ───────────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:13px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.truncate{max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── BADGES ───────────────────────────────────────────────────── */
+.badge-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge-green{background:rgba(34,197,94,.15);color:#4ade80}
+.badge-red{background:rgba(239,68,68,.15);color:#f87171}
+.badge-yellow{background:rgba(245,158,11,.15);color:#fbbf24}
+.badge-blue{background:rgba(59,130,246,.15);color:#60a5fa}
+.badge-purple{background:rgba(168,85,247,.15);color:#c084fc}
+.badge-orange{background:rgba(249,115,22,.15);color:#fb923c}
+.badge-gray{background:rgba(107,114,128,.15);color:#9ca3af}
+
+/* ── BUTTONS ──────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius);font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .2s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent2)}
+.btn-secondary{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-success{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
+.btn-success:hover{background:rgba(34,197,94,.25)}
+.btn-danger{background:rgba(239,68,68,.1);color:#f87171;border:1px solid rgba(239,68,68,.2)}
+.btn-danger:hover{background:rgba(239,68,68,.2)}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── FORMS ────────────────────────────────────────────────────── */
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:var(--radius);font-size:13px;font-family:inherit;transition:border-color .2s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{outline:none;border-color:var(--accent)}
+.form-textarea{resize:vertical;min-height:80px}
+.form-select{cursor:pointer}
+
+/* ── FILTERS ROW ──────────────────────────────────────────────── */
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.filters .form-select{width:auto;padding:6px 10px;font-size:12px}
+.filters .form-input{width:220px;padding:6px 10px;font-size:12px}
+
+/* ── EXPAND PANEL ─────────────────────────────────────────────── */
+.expand-row{display:none}
+.expand-row.open{display:table-row}
+.expand-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:8px 0}
+.expand-panel h4{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase}
+
+/* ── CHARTS ───────────────────────────────────────────────────── */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.chart-box h3{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:12px}
+canvas{max-height:220px}
+
+/* ── AGENT CARDS ──────────────────────────────────────────────── */
+.agent-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.agent-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.agent-card .agent-name{font-weight:600;margin-bottom:4px}
+.agent-card .agent-role{font-size:11px;color:var(--muted);margin-bottom:10px}
+.agent-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+.agent-stat{text-align:center}
+.agent-stat .val{font-size:20px;font-weight:700}
+.agent-stat .lbl{font-size:10px;color:var(--muted)}
+.sla-alert{color:var(--danger)}
+
+/* ── UPLOAD ZONE ──────────────────────────────────────────────── */
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:border-color .2s}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent)}
+.upload-zone p{color:var(--muted);font-size:13px;margin-top:8px}
+
+/* ── SCRAPE LOG ───────────────────────────────────────────────── */
+.log-entry{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;font-size:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.log-entry .log-time{color:var(--muted);white-space:nowrap}
+.log-entry .log-retailer{font-weight:600}
+.log-entry.has-error{border-color:rgba(239,68,68,.3)}
+
+/* ── PDF PREVIEW ──────────────────────────────────────────────── */
+.pdf-preview{width:100%;height:500px;border:1px solid var(--border);border-radius:var(--radius);background:#fff}
+
+/* ── TABS ─────────────────────────────────────────────────────── */
+.tab-bar{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;gap:4px}
+.tab-btn{padding:8px 16px;font-size:12px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-btn:hover{color:var(--text)}
+
+/* ── MISC ─────────────────────────────────────────────────────── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.section-title{font-size:16px;font-weight:700}
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.loading{text-align:center;padding:30px;color:var(--muted)}
+.text-muted{color:var(--muted)}
+.text-success{color:var(--success)}
+.text-danger{color:var(--danger)}
+.text-warning{color:var(--warning)}
+.text-info{color:var(--info)}
+.flex{display:flex}.gap-2{gap:8px}.gap-3{gap:12px}.items-center{align-items:center}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);padding:12px 18px;border-radius:var(--radius);font-size:13px;z-index:9999;max-width:320px;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:translateY(100px);opacity:0;transition:all .3s}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.success{border-color:var(--success);color:var(--success)}
+.toast.error{border-color:var(--danger);color:var(--danger)}
+.pagination{display:flex;gap:6px;align-items:center;margin-top:16px;justify-content:flex-end}
+.page-btn{padding:5px 10px;border-radius:var(--radius);font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);color:var(--text)}
+.page-btn.active{background:var(--accent);border-color:var(--accent)}
+.page-btn:disabled{opacity:.4;cursor:not-allowed}
+.confidence-bar{height:4px;background:var(--border);border-radius:2px;margin-top:4px;overflow:hidden}
+.confidence-fill{height:100%;border-radius:2px;transition:width .3s}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sidebar-logo">
+    <div class="brand">CQM</div>
+    <div class="sub">Customer Query Management</div>
+    <div class="hisense">Hisense PoC v2.0</div>
+  </div>
+  <nav id="nav">
+    <a class="nav-item active" data-tab="dashboard" onclick="showTab('dashboard')">
+      <span class="icon">📊</span> Dashboard
+    </a>
+    <a class="nav-item" data-tab="scrape-targets" onclick="showTab('scrape-targets')">
+      <span class="icon">🎯</span> Scrape Targets
+    </a>
+    <a class="nav-item" data-tab="review-queue" onclick="showTab('review-queue')">
+      <span class="icon">🔍</span> Review Queue
+      <span class="badge" id="review-badge" style="display:none">0</span>
+    </a>
+    <a class="nav-item" data-tab="answer-queue" onclick="showTab('answer-queue')">
+      <span class="icon">✅</span> Answered
+    </a>
+    <a class="nav-item" data-tab="knowledge-base" onclick="showTab('knowledge-base')">
+      <span class="icon">📚</span> Knowledge Base
+    </a>
+    <a class="nav-item" data-tab="agents" onclick="showTab('agents')">
+      <span class="icon">👥</span> Agents
+    </a>
+    <a class="nav-item" data-tab="scrape-logs" onclick="showTab('scrape-logs')">
+      <span class="icon">📋</span> Scrape Logs
+    </a>
+    <a class="nav-item" data-tab="post-answers" onclick="showTab('post-answers')">
+      <span class="icon">📤</span> Post Answers
+    </a>
+    <a class="nav-item" data-tab="config" onclick="showTab('config')">
+      <span class="icon">⚙️</span> Configuration
+    </a>
+  </nav>
+  <div class="sidebar-bottom">
+    <div style="font-size:11px;color:var(--muted)" id="health-indicator">Checking...</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <h1 id="page-title">Dashboard</h1>
+    <div class="scraping-controls">
+      <div class="toggle-group">
+        <span>Auto</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="auto-toggle" onchange="toggleAuto(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="engine-toggle">
+        <button class="engine-btn active" id="engine-scraperapi" onclick="setEngine('scraperapi')">ScraperAPI</button>
+        <button class="engine-btn" id="engine-apify" onclick="setEngine('apify')">Apify</button>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="scrapeNow()" id="scrape-now-btn">⚡ Scrape Now</button>
+    </div>
+    <div class="role-selector">
+      <span>Viewing as:</span>
+      <select id="role-select" onchange="setRole(this.value)">
+        <option value="admin">👑 Admin User</option>
+        <option value="manager">📊 Sarah Manager</option>
+        <option value="agent_alex">🎧 Alex Agent</option>
+        <option value="agent_jamie">🎧 Jamie Agent</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- CONTENT AREA -->
+  <div id="content">
+    <!-- Each tab section rendered via JS -->
+    <div id="tab-dashboard"></div>
+    <div id="tab-scrape-targets" style="display:none"></div>
+    <div id="tab-review-queue" style="display:none"></div>
+    <div id="tab-answer-queue" style="display:none"></div>
+    <div id="tab-knowledge-base" style="display:none"></div>
+    <div id="tab-agents" style="display:none"></div>
+    <div id="tab-scrape-logs" style="display:none"></div>
+    <div id="tab-post-answers" style="display:none"></div>
+    <div id="tab-config" style="display:none"></div>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+// ================================================================
+// CQM v2 — Frontend JavaScript
+// ================================================================
+
+const API = 'https://cqm-v2-backend.onrender.com/api';
+// During dev: const API = 'http://localhost:3000/api';
+
+let currentTab = 'dashboard';
+let currentRole = 'admin';
+let scrapingConfig = { auto_enabled: true, engine: 'scraperapi', interval_minutes: 10 };
+let dashCharts = {};
+let reviewPage = 1, answerPage = 1;
+
+// ── INIT ─────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadConfig();
+  await checkHealth();
+  showTab('dashboard');
+  setInterval(checkHealth, 30000);
+  setInterval(() => { if (currentTab === 'review-queue') loadReviewQueue(); }, 60000);
+});
+
+// ── TOAST ─────────────────────────────────────────────────────────
+function toast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── HEALTH ────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const data = await apiFetch('/health');
+    const el = document.getElementById('health-indicator');
+    if (data.status === 'ok') {
+      el.innerHTML = `<span style="color:var(--success)">● Live</span> · ${data.counts?.questions || 0} Q`;
+    } else {
+      el.innerHTML = `<span style="color:var(--danger)">● Error</span>`;
+    }
+    updateReviewBadge(data.counts?.review || 0);
+  } catch { document.getElementById('health-indicator').innerHTML = `<span style="color:var(--danger)">● Offline</span>`; }
+}
+
+function updateReviewBadge(count) {
+  const badge = document.getElementById('review-badge');
+  if (count > 0) { badge.textContent = count; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
+}
+
+// ── API HELPER ────────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+    ...options
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+// ── TAB NAVIGATION ────────────────────────────────────────────────
+function showTab(tab) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
+  document.getElementById(`tab-${tab}`).style.display = '';
+  currentTab = tab;
+
+  const titles = {
+    'dashboard': 'Dashboard',
+    'scrape-targets': 'Scrape Targets',
+    'review-queue': 'Review Queue',
+    'answer-queue': 'Answered Questions',
+    'knowledge-base': 'Knowledge Base',
+    'agents': 'Agents',
+    'scrape-logs': 'Scrape Logs',
+    'post-answers': 'Post Answers',
+    'config': 'Configuration'
+  };
+  document.getElementById('page-title').textContent = titles[tab] || tab;
+
+  const loaders = {
+    'dashboard': loadDashboard,
+    'scrape-targets': loadScrapeTargets,
+    'review-queue': loadReviewQueue,
+    'answer-queue': loadAnswerQueue,
+    'knowledge-base': loadKB,
+    'agents': loadAgents,
+    'scrape-logs': loadScrapeLogs,
+    'post-answers': loadPostAnswers,
+    'config': loadConfig_tab
+  };
+  loaders[tab]?.();
+}
+
+// ── ROLE ──────────────────────────────────────────────────────────
+function setRole(role) {
+  currentRole = role;
+  if (currentTab === 'review-queue') loadReviewQueue();
+  if (currentTab === 'agents') loadAgents();
+}
+
+// ── SCRAPING CONTROLS ─────────────────────────────────────────────
+async function loadConfig() {
+  try {
+    const cfg = await apiFetch('/config');
+    scrapingConfig = cfg.scraping_config || scrapingConfig;
+    document.getElementById('auto-toggle').checked = scrapingConfig.auto_enabled;
+    setEngineUI(scrapingConfig.engine || 'scraperapi');
+  } catch {}
+}
+
+function setEngineUI(engine) {
+  document.getElementById('engine-scraperapi').classList.toggle('active', engine === 'scraperapi');
+  document.getElementById('engine-apify').classList.toggle('active', engine === 'apify');
+}
+
+async function setEngine(engine) {
+  scrapingConfig.engine = engine;
+  setEngineUI(engine);
+  await saveScrapingConfig();
+}
+
+async function toggleAuto(enabled) {
+  scrapingConfig.auto_enabled = enabled;
+  await saveScrapingConfig();
+  toast(enabled ? 'Auto-scraping enabled' : 'Auto-scraping paused', 'info');
+}
+
+async function saveScrapingConfig() {
+  try {
+    await apiFetch('/scrape/config', {
+      method: 'POST',
+      body: JSON.stringify(scrapingConfig)
+    });
+  } catch (e) { toast('Config save failed: ' + e.message, 'error'); }
+}
+
+async function scrapeNow() {
+  const btn = document.getElementById('scrape-now-btn');
+  btn.disabled = true; btn.textContent = '⏳ Scraping...';
+  try {
+    const result = await apiFetch('/scrape/now', { method: 'POST' });
+    toast(`Scraped ${result.scraped || 0} targets · ${result.logs?.reduce((s,l)=>s+l.new_count,0)||0} new questions`, 'success');
+    if (currentTab === 'dashboard') loadDashboard();
+    if (currentTab === 'review-queue') loadReviewQueue();
+    checkHealth();
+  } catch (e) { toast('Scrape failed: ' + e.message, 'error'); }
+  finally { btn.disabled = false; btn.textContent = '⚡ Scrape Now'; }
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────
+async function loadDashboard() {
+  const el = document.getElementById('tab-dashboard');
+  el.innerHTML = '<div class="loading">Loading dashboard...</div>';
+  try {
+    const s = await apiFetch('/dashboard/stats');
+    Object.values(dashCharts).forEach(c => c.destroy());
+    dashCharts = {};
+
+    el.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="stat-value">${s.total||0}</div><div class="stat-label">Total Questions</div></div>
+      <div class="stat-card success"><div class="stat-value">${s.answered||0}</div><div class="stat-label">Answered</div></div>
+      <div class="stat-card warning"><div class="stat-value">${s.review||0}</div><div class="stat-label">In Review</div></div>
+      <div class="stat-card info"><div class="stat-value">${s.unanswered||0}</div><div class="stat-label">Pending</div></div>
+      <div class="stat-card accent"><div class="stat-value">${s.automation_rate||0}%</div><div class="stat-label">Automation Rate</div><div class="stat-sub">${s.auto_approved||0} auto-approved</div></div>
+      <div class="stat-card ${s.sla_breached>0?'danger':''}"><div class="stat-value">${s.sla_breached||0}</div><div class="stat-label">SLA Breached</div><div class="stat-sub">>24hrs pending</div></div>
+      <div class="stat-card"><div class="stat-value">${s.kb_entries||0}</div><div class="stat-label">KB Entries</div></div>
+    </div>
+
+    <div class="chart-grid">
+      <div class="chart-box"><h3>Questions by Category</h3><canvas id="chart-category"></canvas></div>
+      <div class="chart-box"><h3>Questions by Sentiment</h3><canvas id="chart-sentiment"></canvas></div>
+      <div class="chart-box"><h3>Questions by Retailer</h3><canvas id="chart-retailer"></canvas></div>
+      <div class="chart-box"><h3>7-Day Trend</h3><canvas id="chart-trend"></canvas></div>
+    </div>`;
+
+    renderCharts(s);
+  } catch (e) { el.innerHTML = `<div class="empty">Failed to load: ${e.message}</div>`; }
+}
+
+function renderCharts(s) {
+  const COLORS = ['#e8502a','#3b82f6','#22c55e','#f59e0b','#a855f7','#06b6d4','#ec4899','#84cc16'];
+  const cfg = (labels, data, type='doughnut') => ({
+    type,
+    data: {
+      labels,
+      datasets: [{ data, backgroundColor: COLORS.slice(0, labels.length), borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { position:'right', labels: { color:'#8892a4', font:{size:11}, boxWidth:12 } } }
+    }
+  });
+
+  const catLabels = Object.keys(s.by_category||{});
+  if (catLabels.length) dashCharts.cat = new Chart(document.getElementById('chart-category'), cfg(catLabels, catLabels.map(k=>s.by_category[k])));
+
+  const sentLabels = Object.keys(s.by_sentiment||{});
+  if (sentLabels.length) dashCharts.sent = new Chart(document.getElementById('chart-sentiment'), cfg(sentLabels, sentLabels.map(k=>s.by_sentiment[k])));
+
+  const retLabels = Object.keys(s.by_retailer||{});
+  if (retLabels.length) dashCharts.ret = new Chart(document.getElementById('chart-retailer'), cfg(retLabels, retLabels.map(k=>s.by_retailer[k])));
+
+  // Trend line chart
+  const trend = s.trend || [];
+  if (trend.length) {
+    dashCharts.trend = new Chart(document.getElementById('chart-trend'), {
+      type: 'line',
+      data: {
+        labels: trend.map(d=>d.date),
+        datasets: [
+          { label:'Total', data: trend.map(d=>d.total), borderColor:'#e8502a', backgroundColor:'rgba(232,80,42,.1)', fill:true, tension:.4 },
+          { label:'Answered', data: trend.map(d=>d.answered), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.1)', fill:true, tension:.4 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { labels: { color:'#8892a4', font:{size:11} } } },
+        scales: {
+          x: { ticks:{ color:'#8892a4', font:{size:10} }, grid:{ color:'#2a3042' } },
+          y: { ticks:{ color:'#8892a4', font:{size:10} }, grid:{ color:'#2a3042' } }
+        }
+      }
+    });
+  }
+}
+
+// ── SCRAPE TARGETS ───────────────────────────────────────────────
+async function loadScrapeTargets() {
+  const el = document.getElementById('tab-scrape-targets');
+  el.innerHTML = `
+  <div class="section-header">
+    <div class="section-title">Scrape Targets</div>
+    <div class="flex gap-2">
+      <a href="${API}/scrape-targets/template" class="btn btn-secondary btn-sm">⬇️ Download Template</a>
+      <button class="btn btn-primary btn-sm" onclick="showUploadForm()">⬆️ Upload Excel</button>
+    </div>
+  </div>
+  <div id="upload-area"></div>
+  <div class="card" id="targets-card"><div class="loading">Loading targets...</div></div>`;
+  await refreshTargets();
+}
+
+function showUploadForm() {
+  const area = document.getElementById('upload-area');
+  area.innerHTML = `
+  <div class="card">
+    <div class="card-title">Upload Product URLs (Excel)</div>
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('excel-file').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)">
+      <div style="font-size:32px">📊</div>
+      <p>Click or drag an Excel file here</p>
+      <p style="font-size:11px;margin-top:4px">Columns: retailer, product_name, url, active</p>
+    </div>
+    <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(this.files[0])">
+    <button class="btn btn-secondary btn-sm" style="margin-top:10px" onclick="document.getElementById('upload-area').innerHTML=''">Cancel</button>
+  </div>`;
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadExcel(file);
+}
+
+async function uploadExcel(file) {
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch(`${API}/scrape-targets/upload`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    toast(`${data.inserted} targets uploaded`, 'success');
+    document.getElementById('upload-area').innerHTML = '';
+    await refreshTargets();
+  } catch (e) { toast('Upload failed: ' + e.message, 'error'); }
+}
+
+async function refreshTargets() {
+  const card = document.getElementById('targets-card');
+  if (!card) return;
+  try {
+    const targets = await apiFetch('/scrape-targets');
+    if (!targets.length) { card.innerHTML = '<div class="empty">No scrape targets yet. Upload an Excel file to get started.</div>'; return; }
+
+    card.innerHTML = `
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Retailer</th><th>Product</th><th>URL</th><th>Status</th>
+        <th>Last Scraped</th><th>Found</th><th>Active</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${targets.map(t => `
+        <tr>
+          <td><span class="badge-pill ${t.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${t.retailer}</span></td>
+          <td class="truncate" style="max-width:200px">${t.product_name}</td>
+          <td><a href="${t.url}" target="_blank" style="color:var(--info);font-size:12px">View ↗</a></td>
+          <td><span class="badge-pill ${t.is_active?'badge-green':'badge-gray'}">${t.is_active?'Active':'Inactive'}</span></td>
+          <td style="color:var(--muted);font-size:12px">${t.last_scraped_at ? new Date(t.last_scraped_at).toLocaleString() : '—'}</td>
+          <td>${t.questions_found_total||0}</td>
+          <td><label class="toggle-switch"><input type="checkbox" ${t.is_active?'checked':''} onchange="toggleTarget('${t.id}',this.checked)"><span class="toggle-slider"></span></label></td>
+          <td>
+            <button class="btn btn-secondary btn-sm" onclick="scrapeTarget('${t.id}')">⚡ Now</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteTarget('${t.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+async function toggleTarget(id, active) {
+  try { await apiFetch(`/scrape-targets/${id}`, { method:'PATCH', body: JSON.stringify({ is_active: active }) }); }
+  catch (e) { toast(e.message,'error'); }
+}
+
+async function deleteTarget(id) {
+  if (!confirm('Delete this scrape target?')) return;
+  try { await apiFetch(`/scrape-targets/${id}`, { method:'DELETE' }); await refreshTargets(); }
+  catch (e) { toast(e.message,'error'); }
+}
+
+async function scrapeTarget(id) {
+  try {
+    const log = await apiFetch(`/scrape/target/${id}`, { method:'POST' });
+    toast(`Found ${log.found_count} questions, ${log.new_count} new`, log.error ? 'error' : 'success');
+    await refreshTargets();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ── REVIEW QUEUE ──────────────────────────────────────────────────
+async function loadReviewQueue(page = 1) {
+  reviewPage = page;
+  const el = document.getElementById('tab-review-queue');
+  el.innerHTML = `
+  <div class="section-header">
+    <div class="section-title">Review Queue</div>
+    <div class="filters">
+      <select class="form-select" id="rq-retailer" onchange="loadReviewQueue(1)">
+        <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
+      </select>
+      <select class="form-select" id="rq-category" onchange="loadReviewQueue(1)">
+        <option value="">All Categories</option>
+        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+      <select class="form-select" id="rq-sentiment" onchange="loadReviewQueue(1)">
+        <option value="">All Sentiments</option><option value="positive">Positive</option><option value="neutral">Neutral</option><option value="negative">Negative</option>
+      </select>
+    </div>
+  </div>
+  <div class="card" id="review-table-card"><div class="loading">Loading...</div></div>`;
+
+  await refreshReviewQueue();
+}
+
+async function refreshReviewQueue() {
+  const card = document.getElementById('review-table-card');
+  if (!card) return;
+  try {
+    const retailer  = document.getElementById('rq-retailer')?.value || '';
+    const category  = document.getElementById('rq-category')?.value || '';
+    const sentiment = document.getElementById('rq-sentiment')?.value || '';
+    const agentFilter = getAgentFilter();
+
+    let url = `/questions?status=review&page=${reviewPage}&limit=15`;
+    if (retailer) url += `&retailer=${retailer}`;
+    if (category) url += `&category=${category}`;
+    if (sentiment) url += `&sentiment=${sentiment}`;
+    if (agentFilter) url += `&assigned_to=${encodeURIComponent(agentFilter)}`;
+
+    const { data, total } = await apiFetch(url);
+    updateReviewBadge(total);
+
+    if (!data?.length) { card.innerHTML = '<div class="empty">No questions in review queue.</div>'; return; }
+
+    card.innerHTML = `
+    <div class="table-wrap">
+    <table id="review-table">
+      <thead><tr>
+        <th>Date Asked</th><th>Retailer</th><th>Question</th>
+        <th>Category</th><th>Sentiment</th><th>Confidence</th>
+        <th>Assigned To</th><th>Reason</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+      ${data.map(q => `
+        <tr id="row-${q.id}">
+          <td style="white-space:nowrap;color:var(--muted);font-size:12px">${q.date_asked ? new Date(q.date_asked).toLocaleDateString() : new Date(q.created_at).toLocaleDateString()}</td>
+          <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
+          <td><div class="truncate" style="max-width:250px">${q.question_text}</div></td>
+          <td>${catBadge(q.category)}</td>
+          <td>${sentBadge(q.sentiment)}</td>
+          <td>${confidenceBadge(q.confidence)}</td>
+          <td style="font-size:12px;color:var(--muted)">${q.assigned_to||'—'}</td>
+          <td style="max-width:160px;font-size:11px;color:var(--muted)">${q.review_reason||'—'}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="toggleExpand('${q.id}')">Expand</button></td>
+        </tr>
+        <tr class="expand-row" id="expand-${q.id}">
+          <td colspan="9">
+            <div class="expand-panel">
+              <h4>Full Question</h4>
+              <p style="margin-bottom:12px">${q.question_text}</p>
+              ${q.existing_answer ? `<h4>Existing Retailer Answer</h4><p style="margin-bottom:12px;color:var(--muted)">${q.existing_answer}</p>` : ''}
+              <h4>AI Draft Answer (Editable)</h4>
+              <textarea class="form-textarea" id="draft-${q.id}" style="min-height:100px">${q.ai_answer||''}</textarea>
+              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-secondary btn-sm" onclick="saveDraft('${q.id}')">💾 Save Draft</button>
+                <button class="btn btn-success btn-sm" onclick="approveQuestion('${q.id}',false)">✅ Approve</button>
+                <button class="btn btn-primary btn-sm" onclick="approveQuestion('${q.id}',true)">✅ Approve + Add to KB</button>
+                <select class="form-select" id="assign-${q.id}" style="width:auto;padding:4px 8px;font-size:11px">
+                  <option value="">Reassign to...</option>
+                  <option value="Alex Agent">Alex Agent</option>
+                  <option value="Jamie Agent">Jamie Agent</option>
+                  <option value="Sarah Manager">Sarah Manager</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" onclick="reassign('${q.id}')">↻ Reassign</button>
+              </div>
+            </div>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    ${pagination(total, reviewPage, 15, 'loadReviewQueue')}`;
+  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+function getAgentFilter() {
+  if (currentRole === 'agent_alex') return 'Alex Agent';
+  if (currentRole === 'agent_jamie') return 'Jamie Agent';
+  return '';
+}
+
+function toggleExpand(id) {
+  const row = document.getElementById(`expand-${id}`);
+  row.classList.toggle('open');
+}
+
+async function saveDraft(id) {
+  const answer = document.getElementById(`draft-${id}`)?.value;
+  try {
+    await apiFetch(`/questions/${id}/draft`, { method:'PATCH', body: JSON.stringify({ answer }) });
+    toast('Draft saved','success');
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function approveQuestion(id, addToKB) {
+  const answer = document.getElementById(`draft-${id}`)?.value;
+  try {
+    await apiFetch(`/questions/${id}/approve`, { method:'PATCH', body: JSON.stringify({ answer, add_to_kb: addToKB }) });
+    toast(addToKB ? 'Approved & added to KB' : 'Approved', 'success');
+    document.getElementById(`row-${id}`)?.remove();
+    document.getElementById(`expand-${id}`)?.remove();
+    checkHealth();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function reassign(id) {
+  const agent = document.getElementById(`assign-${id}`)?.value;
+  if (!agent) return;
+  try {
+    await apiFetch(`/questions/${id}/assign`, { method:'PATCH', body: JSON.stringify({ assigned_to: agent }) });
+    toast(`Reassigned to ${agent}`, 'success');
+    await refreshReviewQueue();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ── ANSWER QUEUE ──────────────────────────────────────────────────
+async function loadAnswerQueue(page = 1) {
+  answerPage = page;
+  const el = document.getElementById('tab-answer-queue');
+  el.innerHTML = `
+  <div class="section-header">
+    <div class="section-title">Answered Questions</div>
+    <div class="flex gap-2">
+      <a href="${API}/questions/export/csv" class="btn btn-secondary btn-sm">⬇️ Export</a>
+    </div>
+  </div>
+  <div class="filters">
+    <select class="form-select" id="aq-retailer" onchange="loadAnswerQueue(1)">
+      <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
+    </select>
+    <select class="form-select" id="aq-category" onchange="loadAnswerQueue(1)">
+      <option value="">All Categories</option>
+      ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+    </select>
+  </div>
+  <div class="card" id="answer-table-card"><div class="loading">Loading...</div></div>`;
+
+  await refreshAnswerQueue();
+}
+
+async function refreshAnswerQueue() {
+  const card = document.getElementById('answer-table-card');
+  if (!card) return;
+  try {
+    const retailer = document.getElementById('aq-retailer')?.value || '';
+    const category = document.getElementById('aq-category')?.value || '';
+    let url = `/questions?status=answered&page=${answerPage}&limit=20`;
+    if (retailer) url += `&retailer=${retailer}`;
+    if (category) url += `&category=${category}`;
+
+    const { data, total } = await apiFetch(url);
+    if (!data?.length) { card.innerHTML = '<div class="empty">No answered questions yet.</div>'; return; }
+
+    card.innerHTML = `
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Date Asked</th><th>Date Answered</th><th>Retailer</th><th>Question</th>
+        <th>Category</th><th>Sentiment</th><th>Confidence</th><th>Assigned To</th>
+      </tr></thead>
+      <tbody>${data.map(q=>`
+        <tr>
+          <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${q.date_asked ? new Date(q.date_asked).toLocaleDateString() : '—'}</td>
+          <td style="white-space:nowrap;font-size:12px;color:var(--muted)">${q.date_answered ? new Date(q.date_answered).toLocaleDateString() : '—'}</td>
+          <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
+          <td><div class="truncate">${q.question_text}</div><div style="font-size:11px;color:var(--muted);margin-top:3px">${(q.ai_answer||'').slice(0,80)}...</div></td>
+          <td>${catBadge(q.category)}</td>
+          <td>${sentBadge(q.sentiment)}</td>
+          <td>${confidenceBadge(q.confidence)}</td>
+          <td style="font-size:12px;color:var(--muted)">${q.assigned_to||'Auto'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    ${pagination(total, answerPage, 20, 'loadAnswerQueue')}`;
+  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+// ── KNOWLEDGE BASE ────────────────────────────────────────────────
+async function loadKB(page = 1) {
+  const el = document.getElementById('tab-knowledge-base');
+  el.innerHTML = `
+  <div class="tab-bar">
+    <button class="tab-btn active" id="kb-tab-list" onclick="switchKBTab('list')">KB Entries</button>
+    <button class="tab-btn" id="kb-tab-add" onclick="switchKBTab('add')">Add Entry</button>
+    <button class="tab-btn" id="kb-tab-pdf" onclick="switchKBTab('pdf')">Upload PDF</button>
+  </div>
+  <div id="kb-list-section"></div>
+  <div id="kb-add-section" style="display:none"></div>
+  <div id="kb-pdf-section" style="display:none"></div>`;
+
+  renderKBList(page);
+  renderKBAdd();
+  renderKBPDF();
+}
+
+function switchKBTab(tab) {
+  ['list','add','pdf'].forEach(t => {
+    document.getElementById(`kb-tab-${t}`)?.classList.toggle('active', t===tab);
+    document.getElementById(`kb-${t}-section`).style.display = t===tab ? '' : 'none';
+  });
+}
+
+async function renderKBList(page = 1) {
+  const el = document.getElementById('kb-list-section');
+  el.innerHTML = `
+  <div class="section-header">
+    <div class="section-title">Knowledge Base</div>
+    <button class="btn btn-secondary btn-sm" onclick="backfillEmbeddings()">🔄 Backfill Embeddings</button>
+  </div>
+  <div class="filters">
+    <input class="form-input" id="kb-search" placeholder="Search KB..." oninput="renderKBList(1)" style="width:240px">
+    <select class="form-select" id="kb-cat" onchange="renderKBList(1)">
+      <option value="">All Categories</option>
+      ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+    </select>
+    <select class="form-select" id="kb-src" onchange="renderKBList(1)">
+      <option value="">All Sources</option><option value="manual">Manual</option><option value="pdf_manual">PDF</option><option value="approved_answer">Approved Answer</option><option value="product_spec">Product Spec</option>
+    </select>
+  </div>
+  <div class="card" id="kb-table-card"><div class="loading">Loading...</div></div>`;
+
+  await refreshKBList(page);
+}
+
+async function refreshKBList(page = 1) {
+  const card = document.getElementById('kb-table-card');
+  if (!card) return;
+  const search = document.getElementById('kb-search')?.value||'';
+  const cat = document.getElementById('kb-cat')?.value||'';
+  const src = document.getElementById('kb-src')?.value||'';
+
+  let url = `/knowledge-base?page=${page}&limit=15`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  if (cat) url += `&category=${cat}`;
+  if (src) url += `&source=${src}`;
+
+  try {
+    const { data, total } = await apiFetch(url);
+    if (!data?.length) { card.innerHTML = '<div class="empty">No KB entries.</div>'; return; }
+
+    card.innerHTML = `
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Title</th><th>Category</th><th>Source</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>${data.map(e=>`
+        <tr>
+          <td><div class="truncate" style="max-width:280px">${e.title||'—'}</div><div style="font-size:11px;color:var(--muted);margin-top:2px">${(e.content||'').slice(0,80)}...</div></td>
+          <td>${catBadge(e.category)}</td>
+          <td><span class="badge-pill badge-gray">${e.source||'manual'}</span>${e.has_pdf?` <span class="badge-pill badge-blue">PDF</span>`:''}</td>
+          <td style="font-size:12px;color:var(--muted)">${e.created_at?new Date(e.created_at).toLocaleDateString():'—'}</td>
+          <td>
+            ${e.has_pdf && e.pdf_filename ? `<button class="btn btn-secondary btn-sm" onclick="previewPDF('${e.pdf_filename}','${e.pdf_url||''}')">👁 PDF</button>` : ''}
+            <button class="btn btn-danger btn-sm" onclick="deleteKB('${e.id}')">🗑</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    ${pagination(total, page, 15, 'refreshKBList')}`;
+  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+function renderKBAdd() {
+  const el = document.getElementById('kb-add-section');
+  el.innerHTML = `
+  <div class="card" style="max-width:600px">
+    <div class="card-title">Add KB Entry</div>
+    <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="kb-title" placeholder="Entry title"></div>
+    <div class="form-group"><label class="form-label">Content</label><textarea class="form-textarea" id="kb-content" style="min-height:120px" placeholder="Knowledge base content..."></textarea></div>
+    <div class="form-group"><label class="form-label">Category</label>
+      <select class="form-select" id="kb-new-cat">
+        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="saveKBEntry()">Save Entry</button>
+  </div>`;
+}
+
+async function saveKBEntry() {
+  const title   = document.getElementById('kb-title')?.value;
+  const content = document.getElementById('kb-content')?.value;
+  const category = document.getElementById('kb-new-cat')?.value;
+  if (!content) return toast('Content required','error');
+  try {
+    await apiFetch('/knowledge-base', { method:'POST', body: JSON.stringify({ title, content, category }) });
+    toast('KB entry saved with embedding','success');
+    document.getElementById('kb-content').value = '';
+    document.getElementById('kb-title').value = '';
+    switchKBTab('list');
+    await refreshKBList();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+function renderKBPDF() {
+  const el = document.getElementById('kb-pdf-section');
+  el.innerHTML = `
+  <div class="card" style="max-width:600px">
+    <div class="card-title">Upload Product Manual (PDF)</div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-select" id="pdf-cat">
+        ${['product_info','usage','warranty','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+    </div>
+    <div class="upload-zone" id="pdf-upload-zone" onclick="document.getElementById('pdf-file').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')"
+         ondrop="handlePDFDrop(event)">
+      <div style="font-size:32px">📄</div>
+      <p>Click or drag a PDF manual here</p>
+      <p style="font-size:11px;margin-top:4px">Text will be extracted, chunked, and embedded into the KB</p>
+    </div>
+    <input type="file" id="pdf-file" accept=".pdf" style="display:none" onchange="uploadPDF(this.files[0])">
+    <div id="pdf-result" style="margin-top:12px"></div>
+  </div>
+  <div id="pdf-preview-area"></div>`;
+}
+
+function handlePDFDrop(e) {
+  e.preventDefault();
+  document.getElementById('pdf-upload-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadPDF(file);
+}
+
+async function uploadPDF(file) {
+  if (!file) return;
+  const cat = document.getElementById('pdf-cat')?.value || 'product_info';
+  const res_el = document.getElementById('pdf-result');
+  res_el.innerHTML = '<div style="color:var(--muted)">⏳ Uploading and extracting text...</div>';
+
+  const form = new FormData();
+  form.append('pdf', file);
+  form.append('category', cat);
+  try {
+    const res = await fetch(`${API}/knowledge-base/upload-pdf`, { method:'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    res_el.innerHTML = `<div style="color:var(--success)">✅ Stored ${data.chunks_stored} chunks from ${data.total_chars.toLocaleString()} chars</div>`;
+    if (data.pdf_url) {
+      document.getElementById('pdf-preview-area').innerHTML = `
+      <div class="card" style="margin-top:16px">
+        <div class="card-title">PDF Preview: ${file.name}</div>
+        <iframe class="pdf-preview" src="${data.pdf_url}"></iframe>
+      </div>`;
+    }
+    await refreshKBList();
+  } catch (e) { res_el.innerHTML = `<div style="color:var(--danger)">Error: ${e.message}</div>`; }
+}
+
+function previewPDF(filename, url) {
+  const previewUrl = url || `${API}/knowledge-base/pdf/${filename}`;
+  const area = document.getElementById('pdf-preview-area') || document.querySelector('#tab-knowledge-base');
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.style.marginTop = '16px';
+  div.innerHTML = `<div class="card-title">PDF Preview: ${filename} <button class="btn btn-secondary btn-sm" onclick="this.parentElement.parentElement.remove()">✕ Close</button></div>
+  <iframe class="pdf-preview" src="${previewUrl}"></iframe>`;
+  area.appendChild(div);
+}
+
+async function deleteKB(id) {
+  if (!confirm('Delete this KB entry?')) return;
+  try { await apiFetch(`/knowledge-base/${id}`, { method:'DELETE' }); await refreshKBList(); toast('Deleted','success'); }
+  catch (e) { toast(e.message,'error'); }
+}
+
+async function backfillEmbeddings() {
+  try {
+    const r = await apiFetch('/knowledge-base/backfill-embeddings', { method:'POST' });
+    toast(`${r.done}/${r.total} embeddings generated`, 'success');
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ── AGENTS ────────────────────────────────────────────────────────
+async function loadAgents() {
+  const el = document.getElementById('tab-agents');
+  el.innerHTML = `
+  <div class="tab-bar">
+    <button class="tab-btn active" id="ag-tab-workload" onclick="switchAgentTab('workload')">Workload</button>
+    <button class="tab-btn" id="ag-tab-manage" onclick="switchAgentTab('manage')">Manage Agents</button>
+  </div>
+  <div id="ag-workload-section"><div class="loading">Loading...</div></div>
+  <div id="ag-manage-section" style="display:none"></div>`;
+
+  await refreshAgentWorkload();
+  renderAgentManage();
+}
+
+function switchAgentTab(tab) {
+  ['workload','manage'].forEach(t => {
+    document.getElementById(`ag-tab-${t}`)?.classList.toggle('active', t===tab);
+    document.getElementById(`ag-${t}-section`).style.display = t===tab ? '' : 'none';
+  });
+}
+
+async function refreshAgentWorkload() {
+  const el = document.getElementById('ag-workload-section');
+  try {
+    const agents = await apiFetch('/agents/workload');
+    if (!agents.length) { el.innerHTML = '<div class="empty">No agents configured.</div>'; return; }
+
+    el.innerHTML = `
+    <div class="agent-grid">
+      ${agents.map(a=>`
+      <div class="agent-card">
+        <div class="agent-name">${a.name}</div>
+        <div class="agent-role">${a.role} · ${(a.skills||[]).slice(0,2).join(', ')}${a.skills?.length>2?'...':''}</div>
+        <div class="agent-stats">
+          <div class="agent-stat"><div class="val">${a.open_questions}</div><div class="lbl">Open</div></div>
+          <div class="agent-stat"><div class="val">${a.answered_today}</div><div class="lbl">Done Today</div></div>
+          <div class="agent-stat"><div class="val ${a.sla_breached>0?'sla-alert':''}">${a.sla_breached}</div><div class="lbl">SLA Breach</div></div>
+        </div>
+        ${a.sla_breached>0?`<div style="margin-top:8px;font-size:11px;color:var(--danger)">⚠️ ${a.sla_breached} question${a.sla_breached>1?'s':''} over 24hrs</div>`:''}
+      </div>`).join('')}
+    </div>`;
+  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+async function renderAgentManage() {
+  const el = document.getElementById('ag-manage-section');
+  try {
+    const agents = await apiFetch('/agents');
+    el.innerHTML = `
+    <div class="section-header">
+      <div class="section-title">Manage Agents</div>
+      <button class="btn btn-primary btn-sm" onclick="showAddAgentForm()">+ Add Agent</button>
+    </div>
+    <div id="add-agent-form"></div>
+    <div class="card">
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Name</th><th>Role</th><th>Skills</th><th>Retailers</th><th>Active</th><th>Actions</th></tr></thead>
+      <tbody>${agents.map(a=>`
+        <tr>
+          <td>${a.name}</td>
+          <td><span class="badge-pill ${a.role==='admin'?'badge-red':a.role==='manager'?'badge-purple':'badge-blue'}">${a.role}</span></td>
+          <td style="font-size:11px;color:var(--muted)">${(a.skills||[]).join(', ')||'—'}</td>
+          <td style="font-size:11px;color:var(--muted)">${(a.retailer_ids||[]).join(', ')||'all'}</td>
+          <td><span class="badge-pill ${a.is_active?'badge-green':'badge-gray'}">${a.is_active?'Active':'Inactive'}</span></td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteAgent('${a.id}')">🗑</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div></div>`;
+  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+function showAddAgentForm() {
+  const el = document.getElementById('add-agent-form');
+  const allSkills = ['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'];
+  el.innerHTML = `
+  <div class="card" style="margin-bottom:16px;max-width:500px">
+    <div class="card-title">New Agent</div>
+    <div class="form-group"><label class="form-label">Name</label><input class="form-input" id="new-agent-name"></div>
+    <div class="form-group"><label class="form-label">Role</label>
+      <select class="form-select" id="new-agent-role"><option value="agent">Agent</option><option value="manager">Manager</option></select>
+    </div>
+    <div class="form-group"><label class="form-label">Skills (Ctrl+click for multiple)</label>
+      <select class="form-select" id="new-agent-skills" multiple style="height:120px">${allSkills.map(s=>`<option value="${s}">${s}</option>`).join('')}</select>
+    </div>
+    <div class="flex gap-2">
+      <button class="btn btn-primary" onclick="createAgent()">Create Agent</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('add-agent-form').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+}
+
+async function createAgent() {
+  const name = document.getElementById('new-agent-name')?.value;
+  const role = document.getElementById('new-agent-role')?.value;
+  const skills = [...document.getElementById('new-agent-skills').selectedOptions].map(o=>o.value);
+  if (!name) return toast('Name required','error');
+  try {
+    await apiFetch('/agents', { method:'POST', body: JSON.stringify({ name, role, skills, retailer_ids:['bestbuy','amazon'] }) });
+    toast('Agent created','success');
+    await renderAgentManage();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function deleteAgent(id) {
+  if (!confirm('Delete this agent?')) return;
+  try { await apiFetch(`/agents/${id}`, { method:'DELETE' }); await renderAgentManage(); }
+  catch (e) { toast(e.message,'error'); }
+}
+
+// ── SCRAPE LOGS ───────────────────────────────────────────────────
+async function loadScrapeLogs() {
+  const el = document.getElementById('tab-scrape-logs');
+  el.innerHTML = '<div class="loading">Loading logs...</div>';
+  try {
+    const logs = await apiFetch('/scrape/logs?limit=100');
+    if (!logs.length) { el.innerHTML = '<div class="empty">No scrape logs yet.</div>'; return; }
+    el.innerHTML = `
+    <div class="section-header"><div class="section-title">Scrape Logs</div><div style="color:var(--muted);font-size:12px">${logs.length} recent entries</div></div>
+    ${logs.map(l=>`
+    <div class="log-entry ${l.error?'has-error':''}">
+      <span class="log-time">${new Date(l.scraped_at).toLocaleString()}</span>
+      <span class="log-retailer badge-pill ${l.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${l.retailer}</span>
+      <span style="color:var(--text)">${l.product_name}</span>
+      <span class="badge-pill badge-gray">${l.engine_used}</span>
+      <span style="color:var(--muted)">Found: ${l.found_count}</span>
+      <span style="color:var(--success)">New: ${l.new_count}</span>
+      ${l.error?`<span style="color:var(--danger);font-size:11px">Error: ${l.error}</span>`:''}
+    </div>`).join('')}`;
+  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+// ── POST ANSWERS ──────────────────────────────────────────────────
+async function loadPostAnswers() {
+  const el = document.getElementById('tab-post-answers');
+  try {
+    const cfg = await apiFetch('/post-answers/config');
+    const posting_enabled = cfg.posting_enabled;
+
+    el.innerHTML = `
+    <div class="card" style="max-width:600px;margin-bottom:20px">
+      <div class="card-title">Post Answers to Retailer Sites</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <label class="toggle-switch"><input type="checkbox" ${posting_enabled?'checked':''} onchange="togglePosting(this.checked)"><span class="toggle-slider"></span></label>
+        <span style="font-size:13px">${posting_enabled ? '<span style="color:var(--success)">Posting Enabled</span>' : '<span style="color:var(--muted)">Posting Disabled (PoC Mode)</span>'}</span>
+      </div>
+      <p style="font-size:12px;color:var(--muted)">When enabled, approved answers can be posted back to BestBuy and Amazon. This feature is disabled by default for PoC demonstration purposes.</p>
+      ${!posting_enabled ? '<div style="margin-top:10px;padding:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius);font-size:12px;color:var(--warning)">⚠️ Enable posting to allow answers to be submitted to retailer platforms.</div>' : ''}
+    </div>
+    <div class="card" id="post-queue-card"><div class="loading">Loading answered questions...</div></div>`;
+
+    await refreshPostQueue();
+  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+async function togglePosting(enabled) {
+  try {
+    await apiFetch('/post-answers/toggle', { method:'POST', body: JSON.stringify({ enabled }) });
+    toast(enabled ? 'Posting enabled' : 'Posting disabled', 'success');
+    await loadPostAnswers();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function refreshPostQueue() {
+  const card = document.getElementById('post-queue-card');
+  if (!card) return;
+  try {
+    const { data } = await apiFetch('/questions?status=answered&limit=20');
+    if (!data?.length) { card.innerHTML = '<div class="empty">No answered questions to post.</div>'; return; }
+
+    card.innerHTML = `
+    <div class="card-title">Answered Questions — Post Queue</div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Question</th><th>Retailer</th><th>Date Answered</th><th>Posted</th><th>Action</th></tr></thead>
+      <tbody>${data.map(q=>`
+        <tr>
+          <td class="truncate" style="max-width:260px">${q.question_text}</td>
+          <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
+          <td style="font-size:12px;color:var(--muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
+          <td>${q.posted_to_retailer?'<span class="badge-pill badge-green">Posted</span>':'<span class="badge-pill badge-gray">Not Posted</span>'}</td>
+          <td>${!q.posted_to_retailer?`<button class="btn btn-primary btn-sm" onclick="postAnswer('${q.id}')">📤 Post</button>`:'—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  } catch (e) { card.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+async function postAnswer(id) {
+  try {
+    const r = await apiFetch(`/post-answers/${id}`, { method:'POST' });
+    toast(r.message || 'Posted', 'success');
+    await refreshPostQueue();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ── CONFIG ────────────────────────────────────────────────────────
+async function loadConfig_tab() {
+  const el = document.getElementById('tab-config');
+  el.innerHTML = '<div class="loading">Loading configuration...</div>';
+  try {
+    const cfg = await apiFetch('/config');
+    const sc = cfg.scraping_config || {};
+    el.innerHTML = `
+    <div class="card" style="max-width:500px">
+      <div class="card-title">Scraping Configuration</div>
+      <div class="form-group">
+        <label class="form-label">Scraping Engine</label>
+        <select class="form-select" id="cfg-engine">
+          <option value="scraperapi" ${sc.engine==='scraperapi'?'selected':''}>ScraperAPI (Free 1000/month)</option>
+          <option value="apify" ${sc.engine==='apify'?'selected':''}>Apify (Leadership Demo)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Auto-Scrape Interval (minutes, min 5)</label>
+        <input class="form-input" type="number" id="cfg-interval" value="${sc.interval_minutes||10}" min="5">
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;gap:12px">
+        <label class="toggle-switch"><input type="checkbox" id="cfg-auto" ${sc.auto_enabled?'checked':''}><span class="toggle-slider"></span></label>
+        <span class="form-label" style="margin:0">Auto-scraping enabled</span>
+      </div>
+      <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
+    </div>`;
+  } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+async function saveConfig() {
+  const engine = document.getElementById('cfg-engine')?.value;
+  const interval_minutes = parseInt(document.getElementById('cfg-interval')?.value) || 10;
+  const auto_enabled = document.getElementById('cfg-auto')?.checked || false;
+  try {
+    await apiFetch('/scrape/config', { method:'POST', body: JSON.stringify({ engine, interval_minutes, auto_enabled }) });
+    scrapingConfig = { engine, interval_minutes, auto_enabled };
+    setEngineUI(engine);
+    document.getElementById('auto-toggle').checked = auto_enabled;
+    toast('Configuration saved', 'success');
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────
+function catBadge(cat) {
+  const colors = { product_info:'badge-blue', pricing:'badge-green', warranty:'badge-purple', compatibility:'badge-info', usage:'badge-blue', complaints:'badge-red', returns:'badge-orange', other:'badge-gray' };
+  return cat ? `<span class="badge-pill ${colors[cat]||'badge-gray'}">${cat}</span>` : '—';
+}
+
+function sentBadge(s) {
+  const map = { positive:'badge-green', neutral:'badge-gray', negative:'badge-red' };
+  return s ? `<span class="badge-pill ${map[s]||'badge-gray'}">${s}</span>` : '—';
+}
+
+function confidenceBadge(c) {
+  if (c == null) return '—';
+  const color = c >= 70 ? 'var(--success)' : c >= 40 ? 'var(--warning)' : 'var(--danger)';
+  return `<div style="min-width:60px"><span style="color:${color};font-weight:700">${c}%</span><div class="confidence-bar"><div class="confidence-fill" style="width:${c}%;background:${color}"></div></div></div>`;
+}
+
+function pagination(total, page, limit, fn) {
+  const pages = Math.ceil(total / limit);
+  if (pages <= 1) return '';
+  const btns = [];
+  for (let i = 1; i <= Math.min(pages, 7); i++) {
+    btns.push(`<button class="page-btn ${i===page?'active':''}" onclick="${fn}(${i})">${i}</button>`);
+  }
+  return `<div class="pagination">${btns.join('')}<span style="font-size:12px;color:var(--muted)">${total} total</span></div>`;
+}
+</script>
+</body>
+</html>
