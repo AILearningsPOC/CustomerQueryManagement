@@ -249,6 +249,7 @@ canvas{max-height:220px}
         <button class="engine-btn" id="engine-apify" onclick="setEngine('apify')">Apify</button>
       </div>
       <button class="btn btn-primary btn-sm" onclick="scrapeNow()" id="scrape-now-btn">⚡ Scrape Now</button>
+      <button id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle theme" style="background:var(--card);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:var(--radius);cursor:pointer;font-size:14px">☀️</button>
     </div>
     <div class="role-selector">
       <span>Viewing as:</span>
@@ -283,8 +284,11 @@ canvas{max-height:220px}
 // CQM v2 — Frontend JavaScript
 // ================================================================
 
-const API = 'https://cqm-v2-backend.onrender.com/api';
-// During dev: const API = 'http://localhost:3000/api';
+// ── API URL — stored in localStorage, configurable from Settings tab ──
+function getAPI() {
+  return (localStorage.getItem('cqm_api_url') || 'https://cqm-v2-backend.onrender.com/api').replace(/\/$/, '');
+}
+let API = getAPI();
 
 let currentTab = 'dashboard';
 let currentRole = 'admin';
@@ -292,14 +296,71 @@ let scrapingConfig = { auto_enabled: true, engine: 'scraperapi', interval_minute
 let dashCharts = {};
 let reviewPage = 1, answerPage = 1;
 
+// ── THEME ─────────────────────────────────────────────────────────
+function applyTheme(theme) {
+  const root = document.documentElement;
+  if (theme === 'light') {
+    root.style.setProperty('--bg',      '#f1f3f7');
+    root.style.setProperty('--surface', '#ffffff');
+    root.style.setProperty('--card',    '#ffffff');
+    root.style.setProperty('--border',  '#e2e6ef');
+    root.style.setProperty('--text',    '#1a1f2e');
+    root.style.setProperty('--muted',   '#64748b');
+  } else {
+    root.style.setProperty('--bg',      '#0f1117');
+    root.style.setProperty('--surface', '#181c24');
+    root.style.setProperty('--card',    '#1e2330');
+    root.style.setProperty('--border',  '#2a3042');
+    root.style.setProperty('--text',    '#e8eaf0');
+    root.style.setProperty('--muted',   '#8892a4');
+  }
+  localStorage.setItem('cqm_theme', theme);
+  document.getElementById('theme-toggle-btn').textContent = theme === 'light' ? '🌙' : '☀️';
+}
+
+function toggleTheme() {
+  const current = localStorage.getItem('cqm_theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
+  // Apply saved theme
+  applyTheme(localStorage.getItem('cqm_theme') || 'dark');
+  // Show API URL setup prompt if not configured
+  if (!localStorage.getItem('cqm_api_url')) showApiSetup();
   await loadConfig();
   await checkHealth();
   showTab('dashboard');
   setInterval(checkHealth, 30000);
   setInterval(() => { if (currentTab === 'review-queue') loadReviewQueue(); }, 60000);
 });
+
+function showApiSetup() {
+  const existing = document.getElementById('api-setup-banner');
+  if (existing) return;
+  const banner = document.createElement('div');
+  banner.id = 'api-setup-banner';
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;background:var(--accent);color:#fff;padding:10px 20px;display:flex;align-items:center;gap:12px;font-size:13px';
+  banner.innerHTML = `
+    <span>⚙️ Set your backend API URL to get started:</span>
+    <input id="api-url-input" type="text" placeholder="https://your-app.onrender.com/api"
+      style="flex:1;padding:5px 10px;border-radius:6px;border:none;font-size:13px;max-width:400px;color:#1a1f2e">
+    <button onclick="saveApiUrl()" style="background:#fff;color:var(--accent);border:none;padding:5px 14px;border-radius:6px;font-weight:700;cursor:pointer">Save</button>
+    <button onclick="document.getElementById('api-setup-banner').remove()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:5px 10px;border-radius:6px;cursor:pointer">Skip</button>`;
+  document.body.prepend(banner);
+}
+
+function saveApiUrl() {
+  const input = document.getElementById('api-url-input')?.value?.trim();
+  if (!input) return;
+  const url = input.endsWith('/api') ? input : input.replace(/\/$/, '') + '/api';
+  localStorage.setItem('cqm_api_url', url);
+  API = url;
+  document.getElementById('api-setup-banner')?.remove();
+  toast('API URL saved — reloading...', 'success');
+  setTimeout(() => location.reload(), 1000);
+}
 
 // ── TOAST ─────────────────────────────────────────────────────────
 function toast(msg, type = 'info') {
@@ -1215,7 +1276,25 @@ async function loadConfig_tab() {
   try {
     const cfg = await apiFetch('/config');
     const sc = cfg.scraping_config || {};
+    const savedApiUrl = localStorage.getItem('cqm_api_url') || '';
+    const savedTheme  = localStorage.getItem('cqm_theme') || 'dark';
     el.innerHTML = `
+    <div class="card" style="max-width:500px;margin-bottom:16px">
+      <div class="card-title">App Settings</div>
+      <div class="form-group">
+        <label class="form-label">Backend API URL</label>
+        <input class="form-input" id="cfg-api-url" value="${savedApiUrl}" placeholder="https://your-app.onrender.com/api">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Your Render backend URL. Stored in browser only.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Theme</label>
+        <select class="form-select" id="cfg-theme">
+          <option value="dark" ${savedTheme==='dark'?'selected':''}>🌙 Dark Mode</option>
+          <option value="light" ${savedTheme==='light'?'selected':''}>☀️ Light Mode</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="saveAppSettings()">Save App Settings</button>
+    </div>
     <div class="card" style="max-width:500px">
       <div class="card-title">Scraping Configuration</div>
       <div class="form-group">
@@ -1236,6 +1315,19 @@ async function loadConfig_tab() {
       <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
     </div>`;
   } catch (e) { el.innerHTML = `<div class="empty">Error: ${e.message}</div>`; }
+}
+
+function saveAppSettings() {
+  const apiUrl = document.getElementById("cfg-api-url")?.value?.trim();
+  const theme  = document.getElementById("cfg-theme")?.value || "dark";
+  if (apiUrl) {
+    const url = apiUrl.endsWith("/api") ? apiUrl : apiUrl.replace(/\/$/, "") + "/api";
+    localStorage.setItem("cqm_api_url", url);
+    API = url;
+  }
+  applyTheme(theme);
+  toast("App settings saved", "success");
+  setTimeout(() => location.reload(), 800);
 }
 
 async function saveConfig() {
