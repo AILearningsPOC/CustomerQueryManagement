@@ -894,7 +894,7 @@ async function refreshTargets() {
         <tr>
           <td><span class="badge-pill ${t.retailer==='bestbuy'?'badge-blue':'badge-orange'}">🏪 ${t.retailer}</span></td>
           <td><div class="truncate" style="max-width:200px;font-weight:500">${t.product_name}</div></td>
-          <td><a href="${t.url}" target="_blank" style="color:var(--primary);font-size:12px">↗ View</a></td>
+          <td><button onclick="openRetailerUrl(this.dataset.url)" data-url="${t.url}" style="background:none;border:none;color:var(--primary);font-size:12px;cursor:pointer;padding:0;text-decoration:underline">↗ View</button></td>
           <td><span class="badge-pill ${t.is_active?'badge-green':'badge-gray'}">${t.is_active?'Active':'Inactive'}</span></td>
           <td style="color:var(--text-muted);font-size:12px">${t.last_scraped_at?new Date(t.last_scraped_at).toLocaleString():'Never'}</td>
           <td style="font-weight:600">${t.questions_found_total||0}</td>
@@ -1637,7 +1637,18 @@ async function saveConfig() {
   } catch (e) { toast(e.message,'error'); }
 }
 
-// ── HELPERS ────────────────────────────────────────────────────────
+// ── HELPERS ────────────────────────────────────────────────────
+function openRetailerUrl(url) {
+  // Open with no referrer to bypass Amazon/BestBuy referrer blocks
+  const a = document.createElement("a");
+  a.href = url;
+  a.target = "_blank";
+  a.rel = "noreferrer noopener";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+────
 function catBadge(cat) {
   const map = { product_info:'badge-blue', pricing:'badge-green', warranty:'badge-purple', compatibility:'badge-blue', usage:'badge-orange', complaints:'badge-red', returns:'badge-yellow', other:'badge-gray' };
   return cat ? `<span class="badge-pill ${map[cat]||'badge-gray'}">${cat.replace('_',' ')}</span>` : '—';
