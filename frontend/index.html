@@ -469,11 +469,12 @@ tbody tr:hover td { background: var(--primary-light); }
       <div class="role-selector">
         
         <select id="role-select" onchange="setRole(this.value)">
-          <option value="admin">Admin User</option>
-          <option value="manager">Sarah Manager</option>
-          <option value="agent_alex">Alex Agent</option>
-          <option value="agent_jamie">Jamie Agent</option>
+          <option value="admin">👑 Admin User</option>
+          <option value="manager">📊 Sarah Manager</option>
+          <option value="agent_alex">🎧 Alex Agent</option>
+          <option value="agent_jamie">🎧 Jamie Agent</option>
         </select>
+        <span id="role-indicator" style="font-size:11px;color:var(--success);white-space:nowrap"></span>
       </div>
     </div>
   </div>
@@ -692,8 +693,47 @@ function showTab(tab) {
 // ── ROLE ───────────────────────────────────────────────────────────
 function setRole(role) {
   currentRole = role;
-  if (currentTab === 'review-queue') loadReviewQueue();
-  if (currentTab === 'agents') loadAgents();
+  applyRoleRestrictions(role);
+  // Reload current tab to apply role filters
+  showTab(currentTab);
+}
+
+function applyRoleRestrictions(role) {
+  // Define what each role can see
+  const roleAccess = {
+    admin:       ['dashboard','scrape-targets','review-queue','answer-queue','knowledge-base','agents','scrape-logs','post-answers','config'],
+    manager:     ['dashboard','scrape-targets','review-queue','answer-queue','knowledge-base','agents','scrape-logs','post-answers'],
+    agent_alex:  ['review-queue','answer-queue','knowledge-base'],
+    agent_jamie: ['review-queue','answer-queue','knowledge-base'],
+  };
+
+  const allowed = roleAccess[role] || roleAccess.admin;
+
+  // Show/hide nav items based on role
+  document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
+    const tab = item.getAttribute('data-tab');
+    const canSee = allowed.includes(tab);
+    item.style.display = canSee ? '' : 'none';
+  });
+
+  // Show role indicator in topbar
+  const roleLabels = {
+    admin:       '👑 Admin — Full Access',
+    manager:     '📊 Manager — No Config',
+    agent_alex:  '🎧 Alex Agent — My Queue Only',
+    agent_jamie: '🎧 Jamie Agent — My Queue Only',
+  };
+  const indicator = document.getElementById('role-indicator');
+  if (indicator) {
+    indicator.textContent = roleLabels[role] || role;
+    indicator.style.color = role.startsWith('agent') ? 'var(--warning)' : role === 'manager' ? 'var(--info)' : 'var(--success)';
+  }
+
+  // If current tab not allowed, redirect to first allowed tab
+  if (!allowed.includes(currentTab)) {
+    const firstAllowed = allowed[0] || 'review-queue';
+    showTab(firstAllowed);
+  }
 }
 
 // ── SCRAPING CONTROLS ──────────────────────────────────────────────
@@ -774,7 +814,7 @@ async function loadDashboard() {
     <div class="welcome-banner">
       <div class="welcome-text">
         <h2>${greeting} — CQM Operations Dashboard</h2>
-        <p>Monitor customer questions, AI performance, and agent workload across BestBuy and Amazon.</p>
+        <p>Monitor customer questions, AI performance, and agent workload across BestBuy, Amazon and Target.</p>
       </div>
       <div class="welcome-actions">
         <button class="btn btn-white btn-sm" onclick="scrapeNow()">⚡ Scrape Now</button>
@@ -1125,9 +1165,49 @@ async function refreshReviewQueue() {
 }
 
 function getAgentFilter() {
-  if (currentRole === 'agent_alex') return 'Alex Agent';
+  // Agents only see their own assigned questions
+  if (currentRole === 'agent_alex')  return 'Alex Agent';
   if (currentRole === 'agent_jamie') return 'Jamie Agent';
+  // Manager sees all, Admin sees all
   return '';
+}
+
+function canPerformAction(action) {
+  // Define what each role can do
+  const permissions = {
+    admin:       ['scrape','config','delete','approve','assign','post','kb_edit','agent_manage'],
+    manager:     ['approve','assign','kb_edit'],
+    agent_alex:  ['approve'],
+    agent_jamie: ['approve'],
+  };
+  const allowed = permissions[currentRole] || permissions.admin;
+  return allowed.includes(action);
+}
+
+function buildReviewActions(id) {
+  const isAgent = currentRole.startsWith('agent');
+  const isManager = currentRole === 'manager';
+  const isAdmin = currentRole === 'admin';
+
+  let html = '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
+  html += `<button class="btn btn-secondary btn-sm" onclick="saveDraft('${id}')">💾 Save Draft</button>`;
+  html += `<button class="btn btn-success btn-sm" onclick="approveQuestion('${id}',false)">✓ Approve</button>`;
+  html += `<button class="btn btn-primary btn-sm" onclick="approveQuestion('${id}',true)">✓✓ Approve + Add to KB</button>`;
+
+  // Only Admin and Manager can reassign
+  if (isAdmin || isManager) {
+    html += '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">';
+    html += `<select class="form-select" id="assign-${id}" style="width:auto;padding:6px 10px;font-size:12px">`;
+    html += '<option value="">Reassign to...</option>';
+    html += '<option value="Alex Agent">Alex Agent</option>';
+    html += '<option value="Jamie Agent">Jamie Agent</option>';
+    html += '<option value="Sarah Manager">Sarah Manager</option>';
+    html += '</select>';
+    html += `<button class="btn btn-secondary btn-sm" onclick="reassign('${id}')">↻ Reassign</button>`;
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 function toggleExpand(id) {

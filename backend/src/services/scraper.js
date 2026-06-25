@@ -7,6 +7,8 @@ async function scrapeWithScraperAPI(url, options = {}) {
   const key = process.env.SCRAPERAPI_KEY;
   if (!key) throw new Error('SCRAPERAPI_KEY not configured');
 
+  // BestBuy requires premium=true to bypass bot protection
+  const isBestBuy = url.includes('bestbuy.com');
   const params = new URLSearchParams({
     api_key: key,
     url: url,
@@ -14,7 +16,7 @@ async function scrapeWithScraperAPI(url, options = {}) {
     keep_headers: 'true',
     country_code: 'us'
   });
-  if (options.premium) params.append('premium', 'true');
+  if (options.premium || isBestBuy) params.append('premium', 'true');
 
   const apiUrl = `http://api.scraperapi.com?${params.toString()}`;
   const response = await axios.get(apiUrl, {
@@ -269,17 +271,21 @@ async function scrapeTarget(target, engine) {
 
     log.new_count = newCount;
 
-    await supabase.from('scrape_targets').update({
-      last_scraped_at: new Date().toISOString(),
-      questions_found_total: (target.questions_found_total || 0) + newCount
-    }).eq('id', target.id).catch(e => console.error('[scrapeTarget] Update target failed:', e.message));
+    try {
+      await supabase.from('scrape_targets').update({
+        last_scraped_at: new Date().toISOString(),
+        questions_found_total: (target.questions_found_total || 0) + newCount
+      }).eq('id', target.id);
+    } catch(e) { console.error('[scrapeTarget] Update target failed:', e.message); }
 
   } catch (err) {
     log.error = err.message;
     console.error(`[scrapeTarget] Top-level error for ${target.product_name}:`, err.message);
   }
 
-  await supabase.from('scrape_logs').insert(log).catch(e => console.error('[scrapeTarget] Log insert failed:', e.message));
+  try {
+    await supabase.from('scrape_logs').insert(log);
+  } catch(e) { console.error('[scrapeTarget] Log insert failed:', e.message); }
   return log;
 }
 
