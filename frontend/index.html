@@ -1748,7 +1748,6 @@ function openRetailerUrl(url) {
   a.click();
   document.body.removeChild(a);
 }
-────
 function catBadge(cat) {
   const map = { product_info:'badge-blue', pricing:'badge-green', warranty:'badge-purple', compatibility:'badge-blue', usage:'badge-orange', complaints:'badge-red', returns:'badge-yellow', other:'badge-gray' };
   return cat ? `<span class="badge-pill ${map[cat]||'badge-gray'}">${cat.replace('_',' ')}</span>` : '—';
