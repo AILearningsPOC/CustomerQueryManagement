@@ -216,3 +216,4 @@ function parseDate(str) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 module.exports = { scrapeAll, scrapeTarget };
+// CQM v2.0 - 2026-06-25 - Build: final
