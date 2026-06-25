@@ -500,6 +500,14 @@ tbody tr:hover td { background: var(--primary-light); }
 // CQM v2 — Frontend JS
 // ================================================================
 
+// Close PDF modal on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('pdf-modal-overlay');
+    if (modal) modal.remove();
+  }
+});
+
 // Global error boundary — catch any uncaught JS errors
 window.addEventListener('error', (e) => {
   console.error('Uncaught error:', e.error || e.message);
@@ -523,6 +531,12 @@ let currentRole = 'admin';
 let scrapingConfig = { auto_enabled: true, engine: 'scraperapi', interval_minutes: 10 };
 let dashCharts = {};
 let reviewPage = 1, answerPage = 1;
+// Filter state persistence
+let filterState = {
+  rq: { retailer: '', category: '', sentiment: '' },
+  aq: { retailer: '', category: '' },
+  kb: { search: '', category: '', source: '' }
+};
 
 // ── THEME ──────────────────────────────────────────────────────────
 function applyTheme(theme) {
@@ -892,6 +906,7 @@ async function loadScrapeTargets() {
     <div></div>
     <div class="flex gap-2">
       <a href="${API}/scrape-targets/template" class="btn btn-secondary btn-sm">⬇️ Download Template</a>
+      <span style="font-size:11px;color:var(--text-muted);align-self:center">Supports: BestBuy · Amazon · Target</span>
       <button class="btn btn-primary btn-sm" onclick="showUploadForm()">⬆️ Upload Excel</button>
     </div>
   </div>
@@ -911,7 +926,7 @@ function showUploadForm() {
          ondrop="handleDrop(event)">
       <div class="upload-icon">☁️</div>
       <p>Click or drag an Excel file here</p>
-      <div class="upload-hint">Required columns: retailer, product_name, url, active</div>
+      <div class="upload-hint">Required columns: retailer (bestbuy/amazon/target), product_name, url, active</div>
     </div>
     <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none" onchange="uploadExcel(this.files[0])">
     <button class="btn btn-secondary btn-sm" style="margin-top:14px" onclick="document.getElementById('upload-area').innerHTML=''">
@@ -1014,7 +1029,7 @@ async function loadReviewQueue(page = 1) {
   </div>
   <div class="filters">
     <select class="form-select" id="rq-retailer" onchange="loadReviewQueue(1)">
-      <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
+      <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option><option value="target">Target</option>
     </select>
     <select class="form-select" id="rq-category" onchange="loadReviewQueue(1)">
       <option value="">All Categories</option>
@@ -1032,16 +1047,17 @@ async function refreshReviewQueue() {
   const card = document.getElementById('review-table-card');
   if (!card) return;
   try {
-    const retailer  = document.getElementById('rq-retailer')?.value||'';
-    const category  = document.getElementById('rq-category')?.value||'';
-    const sentiment = document.getElementById('rq-sentiment')?.value||'';
+    const retailer  = document.getElementById('rq-retailer')?.value || '';
+    const category  = document.getElementById('rq-category')?.value || '';
+    const sentiment = document.getElementById('rq-sentiment')?.value || '';
     const agentFilter = getAgentFilter();
 
-    let url = `/questions?status=review&page=${reviewPage}&limit=15`;
-    if (retailer)  url += `&retailer=${retailer}`;
-    if (category)  url += `&category=${category}`;
-    if (sentiment) url += `&sentiment=${sentiment}`;
-    if (agentFilter) url += `&assigned_to=${encodeURIComponent(agentFilter)}`;
+    const params = new URLSearchParams({ status: 'review', page: reviewPage, limit: 15 });
+    if (retailer)     params.append('retailer', retailer);
+    if (category)     params.append('category', category);
+    if (sentiment)    params.append('sentiment', sentiment);
+    if (agentFilter)  params.append('assigned_to', agentFilter);
+    const url = '/questions?' + params.toString();
 
     const { data, total } = await apiFetch(url);
     updateReviewBadge(total);
@@ -1062,7 +1078,7 @@ async function refreshReviewQueue() {
       ${data.map(q=>`
         <tr id="row-${q.id}">
           <td style="white-space:nowrap;color:var(--text-muted);font-size:12px">${q.date_asked?new Date(q.date_asked).toLocaleDateString():new Date(q.created_at).toLocaleDateString()}</td>
-          <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
+          <td>${retailerBadge(q.retailer)}</td>
           <td><div class="truncate" style="max-width:240px">${q.question_text}</div></td>
           <td>${catBadge(q.category)}</td>
           <td>${sentBadge(q.sentiment)}</td>
@@ -1168,7 +1184,7 @@ async function loadAnswerQueue(page = 1) {
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
     <div class="filters" style="margin:0">
       <select class="form-select" id="aq-retailer" onchange="loadAnswerQueue(1)">
-        <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option>
+        <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option><option value="target">Target</option>
       </select>
       <select class="form-select" id="aq-category" onchange="loadAnswerQueue(1)">
         <option value="">All Categories</option>
@@ -1185,11 +1201,12 @@ async function refreshAnswerQueue() {
   const card = document.getElementById('answer-table-card');
   if (!card) return;
   try {
-    const retailer = document.getElementById('aq-retailer')?.value||'';
-    const category = document.getElementById('aq-category')?.value||'';
-    let url = `/questions?status=answered&page=${answerPage}&limit=20`;
-    if (retailer) url += `&retailer=${retailer}`;
-    if (category) url += `&category=${category}`;
+    const retailer = document.getElementById('aq-retailer')?.value || '';
+    const category = document.getElementById('aq-category')?.value || '';
+    const params = new URLSearchParams({ status: 'answered', page: answerPage, limit: 20 });
+    if (retailer) params.append('retailer', retailer);
+    if (category) params.append('category', category);
+    const url = '/questions?' + params.toString();
 
     const { data, total } = await apiFetch(url);
     if (!data?.length) { card.innerHTML = emptyState('✅', 'No answered questions yet', 'Questions will appear here once approved.'); return; }
@@ -1204,7 +1221,7 @@ async function refreshAnswerQueue() {
         <tr>
           <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${q.date_asked?new Date(q.date_asked).toLocaleDateString():'—'}</td>
           <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
-          <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
+          <td>${retailerBadge(q.retailer)}</td>
           <td><div class="truncate" style="font-weight:500">${q.question_text}</div>
               <div style="font-size:11px;color:var(--text-muted);margin-top:3px">${(q.ai_answer||'').slice(0,80)}${q.ai_answer?.length>80?'...':''}</div></td>
           <td>${catBadge(q.category)}</td>
@@ -1275,13 +1292,14 @@ async function renderKBList(page = 1) {
 async function refreshKBList(page = 1) {
   const card = document.getElementById('kb-table-card');
   if (!card) return;
-  const search = document.getElementById('kb-search')?.value||'';
-  const cat = document.getElementById('kb-cat')?.value||'';
-  const src = document.getElementById('kb-src')?.value||'';
-  let url = `/knowledge-base?page=${page}&limit=15`;
-  if (search) url += `&search=${encodeURIComponent(search)}`;
-  if (cat)    url += `&category=${cat}`;
-  if (src)    url += `&source=${src}`;
+  const search = document.getElementById('kb-search')?.value || '';
+  const cat    = document.getElementById('kb-cat')?.value || '';
+  const src    = document.getElementById('kb-src')?.value || '';
+  const params = new URLSearchParams({ page, limit: 15 });
+  if (search) params.append('search', search);
+  if (cat)    params.append('category', cat);
+  if (src)    params.append('source', src);
+  const url = '/knowledge-base?' + params.toString();
   try {
     const { data, total } = await apiFetch(url);
     if (!data?.length) { card.innerHTML = emptyState('📚', 'No KB entries', 'Add entries manually or upload a PDF manual.', 'Add Entry', "switchKBTab('add')"); return; }
@@ -1393,16 +1411,29 @@ async function uploadPDF(file) {
 }
 
 function previewPDF(filename, url) {
-  const previewUrl = url || `${API}/knowledge-base/pdf/${filename}`;
-  const area = document.getElementById('pdf-preview-area') || document.getElementById('kb-list-section');
-  const existing = document.getElementById('pdf-preview-modal');
+  const previewUrl = url || (API + '/knowledge-base/pdf/' + encodeURIComponent(filename));
+
+  const existing = document.getElementById('pdf-modal-overlay');
   if (existing) existing.remove();
-  const div = document.createElement('div');
-  div.id = 'pdf-preview-modal';
-  div.className = 'card';
-  div.style.marginTop = '20px';
-  div.innerHTML = `<div class="card-title">📄 ${filename} <button class="btn btn-secondary btn-xs" style="margin-left:auto" onclick="this.closest('#pdf-preview-modal').remove()">✕ Close</button></div><iframe class="pdf-preview" src="${previewUrl}"></iframe>`;
-  area.appendChild(div);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'pdf-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px';
+
+  overlay.innerHTML =
+    '<div style="background:var(--card);border-radius:var(--radius-lg);width:100%;max-width:920px;height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:var(--shadow-lg)">' +
+      '<div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;gap:12px">' +
+        '<span style="font-size:18px">📄</span>' +
+        '<span style="font-weight:600;font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + filename + '</span>' +
+        '<button id="pdf-close-btn" style="background:var(--danger-bg);color:var(--danger);border:1px solid rgba(234,0,30,.2);padding:5px 14px;border-radius:var(--radius-sm);cursor:pointer;font-size:12px;font-weight:600">✕ Close</button>' +
+      '</div>' +
+      '<iframe src="' + previewUrl + '" style="flex:1;border:none;width:100%;background:#fff"></iframe>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('pdf-close-btn').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 }
 
 async function deleteKB(id) {
@@ -1567,7 +1598,7 @@ async function loadScrapeLogs() {
     ${logs.map(l=>`
     <div class="log-entry ${l.error?'has-error':''}">
       <span class="log-time">🕐 ${new Date(l.scraped_at).toLocaleString()}</span>
-      <span class="badge-pill ${l.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${l.retailer}</span>
+      ${retailerBadge(l.retailer)}
       <span style="font-weight:500">${l.product_name}</span>
       <span class="badge-pill badge-gray">⚙️ ${l.engine_used}</span>
       <span style="color:var(--text-secondary)">Found: <strong>${l.found_count}</strong></span>
@@ -1628,7 +1659,7 @@ async function refreshPostQueue() {
       <tbody>${data.map(q=>`
         <tr>
           <td class="truncate" style="max-width:260px;font-weight:500">${q.question_text}</td>
-          <td><span class="badge-pill ${q.retailer==='bestbuy'?'badge-blue':'badge-orange'}">${q.retailer||'—'}</span></td>
+          <td>${retailerBadge(q.retailer)}</td>
           <td style="font-size:12px;color:var(--text-muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
           <td>${q.posted_to_retailer?'<span class="badge-pill badge-green">✓ Posted</span>':'<span class="badge-pill badge-gray">Not Posted</span>'}</td>
           <td>${!q.posted_to_retailer?`<button class="btn btn-primary btn-xs" onclick="postAnswer('${q.id}')">📤 Post</button>`:'—'}</td>
@@ -1748,6 +1779,17 @@ function openRetailerUrl(url) {
   a.click();
   document.body.removeChild(a);
 }
+function retailerBadge(retailer) {
+  if (!retailer) return '—';
+  const map = {
+    bestbuy: { cls: 'badge-blue',   label: '🛒 BestBuy' },
+    amazon:  { cls: 'badge-orange', label: '📦 Amazon'  },
+    target:  { cls: 'badge-red',    label: '🎯 Target'  },
+  };
+  const r = map[retailer] || { cls: 'badge-gray', label: retailer };
+  return `<span class="badge-pill ${r.cls}">${r.label}</span>`;
+}
+
 function catBadge(cat) {
   const map = { product_info:'badge-blue', pricing:'badge-green', warranty:'badge-purple', compatibility:'badge-blue', usage:'badge-orange', complaints:'badge-red', returns:'badge-yellow', other:'badge-gray' };
   return cat ? `<span class="badge-pill ${map[cat]||'badge-gray'}">${cat.replace('_',' ')}</span>` : '—';

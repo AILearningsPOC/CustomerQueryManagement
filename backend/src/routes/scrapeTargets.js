@@ -69,12 +69,14 @@ router.get('/template', (req, res) => {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet([
       ['retailer', 'product_name', 'url', 'active'],
-      ['bestbuy', 'Hisense 55" U6 Series MiniLED TV', 'https://www.bestbuy.com/site/...', 'yes'],
-      ['bestbuy', 'Hisense 65" U8 Series MiniLED TV', 'https://www.bestbuy.com/site/...', 'yes'],
-      ['amazon',  'Hisense 55" U6 Series MiniLED TV', 'https://www.amazon.com/dp/...',    'yes'],
-      ['amazon',  'Hisense 65" U8 Series MiniLED TV', 'https://www.amazon.com/dp/...',    'yes']
+      ['bestbuy', 'Hisense 55" U6 Series MiniLED TV',     'https://www.bestbuy.com/site/questions/hisense-55-u6-series/6501890', 'yes'],
+      ['bestbuy', 'Hisense 65" U8 Series MiniLED TV',     'https://www.bestbuy.com/site/questions/hisense-65-u8-series/6501891', 'yes'],
+      ['amazon',  'Hisense 55" U6 Series MiniLED TV',     'https://www.amazon.com/ask/questions/asin/B0BVWZLMK5',               'yes'],
+      ['amazon',  'Hisense 65" U8 Series MiniLED TV',     'https://www.amazon.com/ask/questions/asin/B0BVWZLMK6',               'yes'],
+      ['target',  'Hisense 55" 4K UHD Smart Google TV',   'https://www.target.com/p/hisense-55-class-a6-series/-/A-91476601',   'yes'],
+      ['target',  'Hisense 65" 4K UHD Smart Google TV',   'https://www.target.com/p/hisense-65-class-a6-series/-/A-91476602',   'yes'],
     ]);
-    ws['!cols'] = [{ wch: 12 }, { wch: 40 }, { wch: 60 }, { wch: 8 }];
+    ws['!cols'] = [{ wch: 10 }, { wch: 42 }, { wch: 65 }, { wch: 8 }];
     XLSX.utils.book_append_sheet(wb, ws, 'Scrape Targets');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     res.setHeader('Content-Disposition', 'attachment; filename="cqm_scrape_targets_template.xlsx"');
@@ -113,4 +115,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-// CQM v2.0 - 2026-06-25 - Build: final
