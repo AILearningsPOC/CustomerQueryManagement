@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Customer Query Management — Hisense PoC</title>
+<title>CQM — Customer Query Management</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230176D3'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='central' text-anchor='middle' font-family='Inter,system-ui,sans-serif' font-size='13' font-weight='800' fill='white'%3ECQM%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#0176D3">
+<meta name="description" content="Customer Query Management — AI-powered eCommerce Q&A automation">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -127,9 +130,10 @@ button { font-family: inherit; cursor: pointer; }
 .toggle-slider:before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: var(--t); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
 .toggle-switch input:checked + .toggle-slider { background: var(--primary); }
 .toggle-switch input:checked + .toggle-slider:before { transform: translateX(16px); }
-.engine-toggle { display: flex; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); border-radius: var(--radius-sm); overflow: hidden; }
-.engine-btn { padding: 5px 11px; cursor: pointer; color: rgba(255,255,255,.8); transition: all var(--t); border: none; background: none; font-size: 11px; font-weight: 600; font-family: inherit; }
-.engine-btn.active { background: rgba(255,255,255,.9); color: var(--primary-dark); }
+.engine-toggle { display: flex; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.4); border-radius: var(--radius-sm); overflow: hidden; }
+.engine-btn { padding: 5px 11px; cursor: pointer; color: rgba(255,255,255,.95); transition: all var(--t); border: none; background: transparent; font-size: 11px; font-weight: 600; font-family: inherit; opacity: 1 !important; pointer-events: all !important; }
+.engine-btn:hover { background: rgba(255,255,255,.2); }
+.engine-btn.active { background: rgba(255,255,255,.95); color: var(--primary-dark); font-weight: 700; }
 .role-selector { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.85); }
 .role-selector select { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: #fff; padding: 5px 10px; border-radius: var(--radius-sm); font-size: 12px; font-family: inherit; cursor: pointer; }
 .role-selector select option { background: var(--primary-dark); color: #fff; }
@@ -510,7 +514,7 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 function getAPI() {
-  return (localStorage.getItem('cqm_api_url') || 'https://cqm-v2-backend.onrender.com/api').replace(/\/$/, '');
+  return (localStorage.getItem('cqm_api_url') || 'https://customerquerymanagement.onrender.com/api').replace(/\/$/, '');
 }
 let API = getAPI();
 
@@ -638,25 +642,37 @@ async function apiFetch(path, options = {}) {
 // ── TAB NAVIGATION ─────────────────────────────────────────────────
 function showTab(tab) {
   try {
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-    document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+    // Hide all tabs, show selected
     document.querySelectorAll('[id^="tab-"]').forEach(el => el.style.display = 'none');
-    const tabEl = document.getElementById(`tab-${tab}`);
-    if (!tabEl) { console.error(`Tab element not found: tab-${tab}`); return; }
+    const tabEl = document.getElementById('tab-' + tab);
+    if (!tabEl) { console.error('Tab element not found: tab-' + tab); return; }
     tabEl.style.display = '';
     currentTab = tab;
-  const titles = {
-    'dashboard':'Dashboard','scrape-targets':'Scrape Targets','review-queue':'Review Queue',
-    'answer-queue':'Answered Questions','knowledge-base':'Knowledge Base','agents':'Agents',
-    'scrape-logs':'Scrape Logs','post-answers':'Post Answers','config':'Configuration'
-  };
-  document.getElementById('page-title').textContent = titles[tab] || tab;
-  const loaders = {
-    'dashboard':loadDashboard,'scrape-targets':loadScrapeTargets,'review-queue':loadReviewQueue,
-    'answer-queue':loadAnswerQueue,'knowledge-base':loadKB,'agents':loadAgents,
-    'scrape-logs':loadScrapeLogs,'post-answers':loadPostAnswers,'config':loadConfig_tab
-  };
-  loaders[tab]?.();
+
+    // Update nav active state
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const navEl = document.querySelector('[data-tab="' + tab + '"]');
+    if (navEl) navEl.classList.add('active');
+
+    // Update page title
+    const titles = {
+      'dashboard':'Dashboard','scrape-targets':'Scrape Targets','review-queue':'Review Queue',
+      'answer-queue':'Answered Questions','knowledge-base':'Knowledge Base','agents':'Agents',
+      'scrape-logs':'Scrape Logs','post-answers':'Post Answers','config':'Configuration'
+    };
+    const titleEl = document.getElementById('page-title');
+    if (titleEl) titleEl.textContent = titles[tab] || tab;
+
+    // Load tab content
+    const loaders = {
+      'dashboard':loadDashboard,'scrape-targets':loadScrapeTargets,'review-queue':loadReviewQueue,
+      'answer-queue':loadAnswerQueue,'knowledge-base':loadKB,'agents':loadAgents,
+      'scrape-logs':loadScrapeLogs,'post-answers':loadPostAnswers,'config':loadConfig_tab
+    };
+    if (loaders[tab]) loaders[tab]();
+  } catch(e) {
+    console.error('showTab error:', e);
+  }
 }
 
 // ── ROLE ───────────────────────────────────────────────────────────
@@ -686,18 +702,27 @@ function setEngineUI(engine) {
 }
 
 async function setEngine(engine) {
+  // Update UI immediately — don't wait for API
+  scrapingConfig.engine = engine;
+  setEngineUI(engine);
+  // Save to backend async
   try {
-    scrapingConfig.engine = engine;
-    setEngineUI(engine);
     await saveScrapingConfig();
     toast(`Engine switched to ${engine}`, 'success');
-  } catch(e) { toast('Failed to save engine: ' + e.message, 'error'); setEngineUI(scrapingConfig.engine || 'scraperapi'); }
+  } catch(e) {
+    console.warn('Engine config save failed (non-fatal):', e.message);
+    // Keep the UI change even if save fails
+  }
 }
 
 async function toggleAuto(enabled) {
   scrapingConfig.auto_enabled = enabled;
-  await saveScrapingConfig();
-  toast(enabled ? 'Auto-scraping enabled' : 'Auto-scraping paused', 'info');
+  try {
+    await saveScrapingConfig();
+    toast(enabled ? 'Auto-scraping enabled' : 'Auto-scraping paused', 'info');
+  } catch(e) {
+    console.warn('Auto toggle save failed:', e.message);
+  }
 }
 
 async function saveScrapingConfig() {
@@ -797,7 +822,7 @@ async function loadDashboard() {
 
     renderCharts(s);
   } catch (e) {
-    el.innerHTML = emptyState('fa-chart-line', 'Dashboard unavailable', `Could not load stats: ${e.message}`, 'Check Configuration', "showTab('config')");
+    el.innerHTML = emptyState('📊', 'Dashboard unavailable', `Could not load stats: ${e.message}`, 'Check Configuration', "showTab('config')");
   }
 }
 
@@ -922,7 +947,7 @@ async function refreshTargets() {
   try {
     const targets = await apiFetch('/scrape-targets');
     if (!targets.length) {
-      card.innerHTML = emptyState('fa-crosshairs', 'No scrape targets yet', 'Upload an Excel file with product URLs to start scraping BestBuy and Amazon.', 'Upload Excel', 'showUploadForm()');
+      card.innerHTML = emptyState('🎯', 'No scrape targets yet', 'Upload an Excel file with product URLs to start scraping BestBuy and Amazon.', 'Upload Excel', 'showUploadForm()');
       return;
     }
     card.innerHTML = `
@@ -947,7 +972,7 @@ async function refreshTargets() {
         </tr>`).join('')}
       </tbody>
     </table></div>`;
-  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation', 'Error loading targets', e.message); }
+  } catch (e) { card.innerHTML = emptyState('⚠️', 'Error loading targets', e.message); }
 }
 
 async function toggleTarget(id, active) {
@@ -961,9 +986,12 @@ async function toggleTarget(id, active) {
 }
 
 async function deleteTarget(id) {
-  if (!confirm('Delete this scrape target?')) return;
-  try { await apiFetch(`/scrape-targets/${id}`, { method:'DELETE' }); await refreshTargets(); }
-  catch (e) { toast(e.message,'error'); }
+  if (!confirm('Delete this scrape target? It will no longer be scraped.')) return;
+  try {
+    await apiFetch('/scrape-targets/' + id, { method:'DELETE' });
+    toast('Scrape target deleted', 'success');
+    await refreshTargets();
+  } catch(e) { toast('Delete failed: ' + e.message, 'error'); }
 }
 
 async function scrapeTarget(id) {
@@ -1019,7 +1047,7 @@ async function refreshReviewQueue() {
     updateReviewBadge(total);
 
     if (!data?.length) {
-      card.innerHTML = emptyState('fa-inbox', 'Review queue is empty', 'All questions have been processed. Great work!');
+      card.innerHTML = emptyState('📥', 'Review queue is empty', 'All questions have been processed. Great work!');
       return;
     }
 
@@ -1077,7 +1105,7 @@ async function refreshReviewQueue() {
       </tbody>
     </table></div>
     ${pagination(total, reviewPage, 15, 'loadReviewQueue')}`;
-  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation', 'Error', e.message); }
+  } catch (e) { card.innerHTML = emptyState('⚠️', 'Error', e.message); }
 }
 
 function getAgentFilter() {
@@ -1118,10 +1146,13 @@ async function approveQuestion(id, addToKB) {
 }
 
 async function reassign(id) {
-  const agent = document.getElementById(`assign-${id}`)?.value;
-  if (!agent) return;
-  try { await apiFetch(`/questions/${id}/assign`, { method:'PATCH', body: JSON.stringify({ assigned_to: agent }) }); toast(`Reassigned to ${agent}`,'success'); await refreshReviewQueue(); }
-  catch (e) { toast(e.message,'error'); }
+  const agent = document.getElementById('assign-' + id)?.value;
+  if (!agent) return toast('Please select an agent to reassign to', 'error');
+  try {
+    await apiFetch('/questions/' + id + '/assign', { method:'PATCH', body: JSON.stringify({ assigned_to: agent }) });
+    toast('Reassigned to ' + agent, 'success');
+    await refreshReviewQueue();
+  } catch(e) { toast('Reassign failed: ' + e.message, 'error'); }
 }
 
 // ── ANSWER QUEUE ───────────────────────────────────────────────────
@@ -1161,7 +1192,7 @@ async function refreshAnswerQueue() {
     if (category) url += `&category=${category}`;
 
     const { data, total } = await apiFetch(url);
-    if (!data?.length) { card.innerHTML = emptyState('fa-circle-check', 'No answered questions yet', 'Questions will appear here once approved.'); return; }
+    if (!data?.length) { card.innerHTML = emptyState('✅', 'No answered questions yet', 'Questions will appear here once approved.'); return; }
 
     card.innerHTML = `
     <div class="table-wrap"><table>
@@ -1184,7 +1215,7 @@ async function refreshAnswerQueue() {
       </tbody>
     </table></div>
     ${pagination(total, answerPage, 20, 'loadAnswerQueue')}`;
-  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation', 'Error', e.message); }
+  } catch (e) { card.innerHTML = emptyState('⚠️', 'Error', e.message); }
 }
 
 // ── KNOWLEDGE BASE ─────────────────────────────────────────────────
@@ -1253,7 +1284,7 @@ async function refreshKBList(page = 1) {
   if (src)    url += `&source=${src}`;
   try {
     const { data, total } = await apiFetch(url);
-    if (!data?.length) { card.innerHTML = emptyState('fa-book-open', 'No KB entries', 'Add entries manually or upload a PDF manual.', 'Add Entry', "switchKBTab('add')"); return; }
+    if (!data?.length) { card.innerHTML = emptyState('📚', 'No KB entries', 'Add entries manually or upload a PDF manual.', 'Add Entry', "switchKBTab('add')"); return; }
     card.innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr><th>Title</th><th>Category</th><th>Source</th><th>Date Added</th><th>Actions</th></tr></thead>
@@ -1272,7 +1303,7 @@ async function refreshKBList(page = 1) {
       </tbody>
     </table></div>
     ${pagination(total, page, 15, 'refreshKBList')}`;
-  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
+  } catch (e) { card.innerHTML = emptyState('⚠️','Error',e.message); }
 }
 
 function renderKBAdd() {
@@ -1375,9 +1406,12 @@ function previewPDF(filename, url) {
 }
 
 async function deleteKB(id) {
-  if (!confirm('Delete this KB entry?')) return;
-  try { await apiFetch(`/knowledge-base/${id}`, { method:'DELETE' }); await refreshKBList(); toast('Entry deleted','success'); }
-  catch (e) { toast(e.message,'error'); }
+  if (!confirm('Delete this knowledge base entry? This cannot be undone.')) return;
+  try {
+    await apiFetch('/knowledge-base/' + id, { method:'DELETE' });
+    toast('KB entry deleted', 'success');
+    await refreshKBList();
+  } catch(e) { toast('Delete failed: ' + e.message, 'error'); }
 }
 
 async function backfillEmbeddings() {
@@ -1418,7 +1452,7 @@ async function refreshAgentWorkload() {
   const el = document.getElementById('ag-workload-section');
   try {
     const agents = await apiFetch('/agents/workload');
-    if (!agents.length) { el.innerHTML = emptyState('fa-users','No agents configured','Add agents to enable auto-routing and workload tracking.','Add Agent','switchAgentTab(\'manage\')'); return; }
+    if (!agents.length) { el.innerHTML = emptyState('👥','No agents configured','Add agents to enable auto-routing and workload tracking.','Add Agent','switchAgentTab(\'manage\')'); return; }
     el.innerHTML = `<div class="agent-grid">
       ${agents.map(a=>`
       <div class="agent-card">
@@ -1434,7 +1468,7 @@ async function refreshAgentWorkload() {
         </div>
       </div>`).join('')}
     </div>`;
-  } catch (e) { el.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
+  } catch (e) { el.innerHTML = emptyState('⚠️','Error',e.message); }
 }
 
 async function renderAgentManage() {
@@ -1463,7 +1497,7 @@ async function renderAgentManage() {
         </tr>`).join('')}
       </tbody>
     </table></div></div>`;
-  } catch (e) { el.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
+  } catch (e) { el.innerHTML = emptyState('⚠️','Error',e.message); }
 }
 
 function showAddAgentForm() {
@@ -1496,13 +1530,17 @@ async function createAgent() {
     toast('Agent created successfully', 'success');
     document.getElementById('add-agent-form').innerHTML = '';
     await renderAgentManage();
-  } catch(e) { toast('Failed to create agent: ' + e.message, 'error'); }
+  } catch(e) { const msg = e.message.includes('duplicate') ? 'An agent with this name already exists.' : 'Failed to create agent: ' + e.message;
+    toast(msg, 'error'); }
 }
 
 async function deleteAgent(id) {
-  if (!confirm('Delete this agent?')) return;
-  try { await apiFetch(`/agents/${id}`, { method:'DELETE' }); await renderAgentManage(); }
-  catch (e) { toast(e.message,'error'); }
+  if (!confirm('Delete this agent? Any questions assigned to them will remain assigned.')) return;
+  try {
+    await apiFetch('/agents/' + id, { method:'DELETE' });
+    toast('Agent deleted', 'success');
+    await renderAgentManage();
+  } catch(e) { toast('Delete failed: ' + e.message, 'error'); }
 }
 
 // ── SCRAPE LOGS ────────────────────────────────────────────────────
@@ -1517,7 +1555,7 @@ async function loadScrapeLogs() {
   <div class="loading">⏳ Loading logs...</div>`;
   try {
     const logs = await apiFetch('/scrape/logs?limit=100');
-    if (!logs.length) { el.innerHTML += emptyState('fa-list-check','No scrape logs yet','Logs will appear after the first scrape run.'); return; }
+    if (!logs.length) { el.innerHTML += emptyState('📋','No scrape logs yet','Logs will appear after the first scrape run.'); return; }
     const errorCount = logs.filter(l=>l.error).length;
     const newTotal = logs.reduce((s,l)=>s+l.new_count,0);
     el.innerHTML = `
@@ -1536,7 +1574,7 @@ async function loadScrapeLogs() {
       <span style="color:var(--success)">New: <strong>${l.new_count}</strong></span>
       ${l.error?`<span style="color:var(--danger);font-size:11px">✕ ${l.error}</span>`:'<span style="color:var(--success);font-size:11px">✅ OK</span>'}
     </div>`).join('')}`;
-  } catch (e) { el.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
+  } catch (e) { el.innerHTML = emptyState('⚠️','Error',e.message); }
 }
 
 // ── POST ANSWERS ───────────────────────────────────────────────────
@@ -1566,7 +1604,7 @@ async function loadPostAnswers() {
     </div>
     <div class="card" id="post-queue-card"><div class="loading">⏳ Loading answered questions...</div></div>`;
     await refreshPostQueue();
-  } catch (e) { el.innerHTML += emptyState('fa-circle-exclamation','Error',e.message); }
+  } catch (e) { el.innerHTML += emptyState('⚠️','Error',e.message); }
 }
 
 async function togglePosting(enabled) {
@@ -1582,7 +1620,7 @@ async function refreshPostQueue() {
   if (!card) return;
   try {
     const { data } = await apiFetch('/questions?status=answered&limit=20');
-    if (!data?.length) { card.innerHTML = emptyState('fa-paper-plane','No answered questions to post','Questions will appear here once approved.'); return; }
+    if (!data?.length) { card.innerHTML = emptyState('📤','No answered questions to post','Questions will appear here once approved.'); return; }
     card.innerHTML = `
     <div class="card-title">📋 Answered Questions — Post Queue</div>
     <div class="table-wrap"><table>
@@ -1597,7 +1635,7 @@ async function refreshPostQueue() {
         </tr>`).join('')}
       </tbody>
     </table></div>`;
-  } catch (e) { card.innerHTML = emptyState('fa-circle-exclamation','Error',e.message); }
+  } catch (e) { card.innerHTML = emptyState('⚠️','Error',e.message); }
 }
 
 async function postAnswer(id) {
@@ -1663,7 +1701,7 @@ async function loadConfig_tab() {
         <button class="btn btn-primary" onclick="saveConfig()">💾 Save Scraping Config</button>
       </div>
     </div>`;
-  } catch (e) { el.innerHTML += emptyState('fa-circle-exclamation','Error',e.message); }
+  } catch (e) { el.innerHTML += emptyState('⚠️','Error',e.message); }
 }
 
 function saveAppSettings() {
