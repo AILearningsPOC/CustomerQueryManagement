@@ -57,4 +57,4 @@ async function answerQuestion(question) {
 
 module.exports = { searchKB, answerQuestion };
 // CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.3.202606261143
+// BUILD: v2.3.202606261236

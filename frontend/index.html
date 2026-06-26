@@ -455,8 +455,8 @@ tbody tr:hover td { background: var(--primary-light); }
           </label>
         </div>
         <div class="engine-toggle">
-          <button class="engine-btn active" id="engine-scraperapi" onclick="setEngine('scraperapi')">ScraperAPI</button>
-          <button class="engine-btn" id="engine-apify" onclick="setEngine('apify')">Apify</button>
+          <button class="engine-btn" id="engine-scraperapi" onclick="setEngine('scraperapi')">ScraperAPI</button>
+          <button class="engine-btn active" id="engine-apify" onclick="setEngine('apify')">Apify</button>
         </div>
         <button class="btn btn-primary btn-sm" onclick="scrapeNow()" id="scrape-now-btn">
           ⚡ Scrape Now
@@ -529,7 +529,7 @@ let API = getAPI();
 
 let currentTab = 'dashboard';
 let currentRole = 'admin';
-let scrapingConfig = { auto_enabled: true, engine: 'scraperapi', interval_minutes: 10 };
+let scrapingConfig = { auto_enabled: true, engine: 'apify', interval_minutes: 10 };
 let dashCharts = {};
 let reviewPage = 1, answerPage = 1;
 // Filter state persistence
@@ -1326,20 +1326,24 @@ async function loadKB(page = 1) {
   </div>
   <div class="tab-bar">
     <button class="tab-btn active" id="kb-tab-list" onclick="switchKBTab('list')">KB Entries</button>
+    <button class="tab-btn" id="kb-tab-docs" onclick="switchKBTab('docs')">📄 Documents</button>
     <button class="tab-btn" id="kb-tab-pdf" onclick="switchKBTab('pdf')">Upload PDF Manual</button>
   </div>
   <div id="kb-list-section"></div>
+  <div id="kb-docs-section" style="display:none"></div>
   <div id="kb-pdf-section" style="display:none"></div>`;
   renderKBList(page);
+  renderKBDocs();
   renderKBPDF();
 }
 
 function switchKBTab(tab) {
-  ['list','pdf'].forEach(t => {
+  ['list','docs','pdf'].forEach(t => {
     document.getElementById('kb-tab-' + t)?.classList.toggle('active', t===tab);
     const el = document.getElementById('kb-' + t + '-section');
     if (el) el.style.display = t===tab ? '' : 'none';
   });
+  if (tab === 'docs') renderKBDocs();
 }
 
 async function renderKBList(page = 1) {
@@ -1403,6 +1407,83 @@ async function refreshKBList(page = 1) {
 }
 
 
+
+async function renderKBDocs() {
+  const el = document.getElementById('kb-docs-section');
+  if (!el) return;
+  el.innerHTML = '<div class="loading">⏳ Loading documents...</div>';
+
+  try {
+    // Get all PDF-sourced KB entries and group by filename
+    const { data, total } = await apiFetch('/knowledge-base?source=pdf_manual&limit=100');
+
+    if (!data?.length) {
+      el.innerHTML = emptyState('📄', 'No documents uploaded yet', 'Upload a PDF manual to add it to the knowledge base.', 'Upload PDF', "switchKBTab('pdf')");
+      return;
+    }
+
+    // Group chunks by pdf_filename to show one entry per document
+    const docs = {};
+    data.forEach(e => {
+      const fname = e.pdf_filename || 'unknown';
+      if (!docs[fname]) {
+        docs[fname] = {
+          filename: fname,
+          title: e.title ? e.title.replace(/ \(part \d+\/\d+\)$/, '') : fname.replace(/^\d+_/, '').replace(/_/g,' ').replace(/\.pdf$/i,''),
+          pdf_url: e.pdf_url,
+          category: e.category,
+          chunks: 0,
+          created_at: e.created_at,
+          has_pdf: e.has_pdf
+        };
+      }
+      docs[fname].chunks++;
+    });
+
+    const docList = Object.values(docs).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+    el.innerHTML = `
+    <div class="section-header" style="margin-bottom:16px">
+      <div style="font-size:13px;color:var(--text-muted)">${docList.length} document${docList.length!==1?'s':''} uploaded</div>
+      <button class="btn btn-primary btn-sm" onclick="switchKBTab('pdf')">⬆️ Upload New PDF</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px">
+      ${docList.map(doc => `
+      <div class="card" style="margin-bottom:0;cursor:pointer;transition:all .2s" onmouseenter="this.style.transform='translateY(-2px)'" onmouseleave="this.style.transform=''">
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="font-size:36px;flex-shrink:0">📄</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:14px;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${doc.title}">${doc.title}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">${doc.chunks} chunk${doc.chunks!==1?'s':''} · ${catBadge(doc.category)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">${doc.created_at ? new Date(doc.created_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : '—'}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-xs" onclick="previewPDF('${doc.filename}', '${doc.pdf_url||''}')">👁 Preview</button>
+              ${doc.pdf_url ? `<a href="${doc.pdf_url}" target="_blank" rel="noreferrer noopener" class="btn btn-secondary btn-xs">⬇️ Download</a>` : ''}
+              <button class="btn btn-danger btn-xs" onclick="deleteDocAndChunks('${doc.filename}')">🗑 Delete</button>
+            </div>
+          </div>
+        </div>
+      </div>`).join('')}
+    </div>`;
+  } catch(e) {
+    el.innerHTML = emptyState('⚠️', 'Error loading documents', e.message);
+  }
+}
+
+async function deleteDocAndChunks(filename) {
+  if (!confirm('Delete this document and all its KB chunks? This cannot be undone.')) return;
+  try {
+    // Get all KB entries with this filename
+    const { data } = await apiFetch('/knowledge-base?source=pdf_manual&limit=100');
+    const chunks = data.filter(e => e.pdf_filename === filename);
+    for (const chunk of chunks) {
+      await apiFetch('/knowledge-base/' + chunk.id, { method: 'DELETE' });
+    }
+    toast('Document and ' + chunks.length + ' chunks deleted', 'success');
+    renderKBDocs();
+    renderKBList(1);
+  } catch(e) { toast('Delete failed: ' + e.message, 'error'); }
+}
 
 function renderKBPDF() {
   const el = document.getElementById('kb-pdf-section');
@@ -1879,6 +1960,6 @@ function pagination(total, page, limit, fn) {
 }
 </script>
 
-<!-- BUILD: v2.3.202606261143 -->
+<!-- BUILD: v2.3.202606261236 -->
 </body>
 </html>

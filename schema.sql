@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS config (
 
 -- Default config rows
 INSERT INTO config (key, value) VALUES
-  ('scraping_config',  '{"auto_enabled": true, "interval_minutes": 10, "engine": "scraperapi"}'::jsonb),
+  ('scraping_config',  '{"auto_enabled": true, "interval_minutes": 10, "engine": "apify"}'::jsonb),
   ('posting_enabled',  'false'::jsonb),
   ('active_role',      '"admin"'::jsonb)
 ON CONFLICT (key) DO NOTHING;

@@ -8,7 +8,7 @@ let scrapeJob = null;
 async function getConfig() {
   try {
     const { data } = await supabase.from('config').select('value').eq('key', 'scraping_config').single();
-    return data?.value || { auto_enabled: true, interval_minutes: 10, engine: 'scraperapi' };
+    return data?.value || { auto_enabled: true, interval_minutes: 10, engine: 'apify' };
   } catch (err) {
     console.warn('[scheduler] getConfig failed, using defaults:', err.message);
     return { auto_enabled: true, interval_minutes: 10, engine: 'scraperapi' };
@@ -104,4 +104,4 @@ setTimeout(async () => {
 
 module.exports = { restartScheduler, runScrapeAndEnrich };
 // CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.3.202606261143
+// BUILD: v2.3.202606261236
