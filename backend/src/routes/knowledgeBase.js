@@ -6,39 +6,52 @@ const { generateEmbedding } = require('../services/embedding');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// In-memory PDF cache for immediate serving after upload
+const pdfCache = new Map();
+
 // GET /api/knowledge-base
 router.get('/', async (req, res) => {
-  const { category, source, search, page = 1, limit = 20 } = req.query;
-  const offset = (page - 1) * limit;
+  try {
+    const { category, source, search, page = 1, limit = 20 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
 
-  let query = supabase.from('knowledge_base').select('id,title,content,category,source,created_at,has_pdf,pdf_filename', { count: 'exact' });
-  if (category) query = query.eq('category', category);
-  if (source)   query = query.eq('source', source);
-  if (search)   query = query.ilike('content', `%${search}%`);
+    let query = supabase.from('knowledge_base')
+      .select('id,title,content,category,source,created_at,has_pdf,pdf_filename,pdf_url', { count: 'exact' });
+    if (category) query = query.eq('category', category);
+    if (source)   query = query.eq('source', source);
+    if (search)   query = query.ilike('content', `%${search}%`);
 
-  const { data, error, count } = await query
-    .order('created_at', { ascending: false })
-    .range(offset, offset + parseInt(limit) - 1);
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
 
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data, total: count });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data: data || [], total: count || 0 });
+  } catch (err) {
+    console.error('[kb.GET /]', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/knowledge-base/:id
 router.get('/:id', async (req, res) => {
-  const { data, error } = await supabase.from('knowledge_base').select('*').eq('id', req.params.id).single();
-  if (error) return res.status(404).json({ error: 'Not found' });
-  res.json(data);
+  try {
+    const { data, error } = await supabase.from('knowledge_base').select('*').eq('id', req.params.id).single();
+    if (error || !data) return res.status(404).json({ error: 'Not found' });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// POST /api/knowledge-base — manual entry
+// POST /api/knowledge-base
 router.post('/', async (req, res) => {
   try {
     const { title, content, category, source } = req.body;
     if (!content) return res.status(400).json({ error: 'content required' });
 
     let embedding = null;
-    try { embedding = await generateEmbedding(content); } catch (e) { console.error('Embedding error:', e.message); }
+    try { embedding = await generateEmbedding(content); } catch (e) { console.error('[kb] Embedding error:', e.message); }
 
     const { data, error } = await supabase.from('knowledge_base').insert({
       title, content, category: category || 'other',
@@ -49,6 +62,7 @@ router.post('/', async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     res.status(201).json(data);
   } catch (err) {
+    console.error('[kb.POST /]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -58,13 +72,9 @@ router.put('/:id', async (req, res) => {
   try {
     const { title, content, category } = req.body;
     let embedding = null;
-    if (content) {
-      try { embedding = await generateEmbedding(content); } catch (e) {}
-    }
-
+    if (content) { try { embedding = await generateEmbedding(content); } catch (e) {} }
     const updates = { title, content, category, updated_at: new Date().toISOString() };
     if (embedding) updates.embedding = embedding;
-
     const { data, error } = await supabase.from('knowledge_base').update(updates).eq('id', req.params.id).select().single();
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
@@ -75,9 +85,13 @@ router.put('/:id', async (req, res) => {
 
 // DELETE /api/knowledge-base/:id
 router.delete('/:id', async (req, res) => {
-  const { error } = await supabase.from('knowledge_base').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true });
+  try {
+    const { error } = await supabase.from('knowledge_base').delete().eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/knowledge-base/upload-pdf
@@ -86,48 +100,84 @@ router.post('/upload-pdf', upload.single('pdf'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No PDF uploaded' });
 
     const pdfParse = require('pdf-parse');
-    const parsed = await pdfParse(req.file.buffer);
-    const text = parsed.text.replace(/\s+/g, ' ').trim();
+    let text = '';
+    try {
+      const parsed = await pdfParse(req.file.buffer);
+      text = parsed.text.replace(/\s+/g, ' ').trim();
+    } catch (parseErr) {
+      return res.status(400).json({ error: 'Could not extract text from PDF. Ensure it is a text-based (not scanned) PDF.' });
+    }
 
-    if (text.length < 50) return res.status(400).json({ error: 'Could not extract text from PDF' });
+    if (text.length < 50) return res.status(400).json({ error: 'Could not extract meaningful text from PDF' });
 
-    // Upload PDF to Supabase Storage
     const filename = `${Date.now()}_${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-    const { error: uploadError } = await supabase.storage
-      .from('manuals')
-      .upload(filename, req.file.buffer, { contentType: 'application/pdf' });
 
+    // ── STORAGE UPLOAD ─────────────────────────────────────────────
     let pdfUrl = null;
-    if (!uploadError) {
-      const { data: urlData } = supabase.storage.from('manuals').getPublicUrl(filename);
-      pdfUrl = urlData?.publicUrl;
+    let storageSuccess = false;
+
+    try {
+      console.log(`[KB] Uploading PDF to storage: ${filename}`);
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('manuals')
+        .upload(filename, req.file.buffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+          cacheControl: '3600'
+        });
+
+      if (uploadError) {
+        console.error('[KB] Storage upload error:', uploadError.message, uploadError);
+      } else {
+        console.log('[KB] Storage upload success:', uploadData);
+        // Get public URL
+        const { data: urlData } = supabase.storage.from('manuals').getPublicUrl(filename);
+        pdfUrl = urlData?.publicUrl || null;
+        storageSuccess = true;
+        console.log('[KB] Public URL:', pdfUrl);
+      }
+    } catch (storageErr) {
+      console.error('[KB] Storage exception:', storageErr.message);
     }
 
-    // Chunk and embed (chunks of ~500 chars)
-    const chunks = [];
+    // ── CACHE PDF BUFFER in memory for immediate streaming ─────────
+    // This ensures preview works even if storage upload failed
+    pdfCache.set(filename, {
+      buffer: req.file.buffer,
+      contentType: 'application/pdf',
+      originalName: req.file.originalname,
+      uploadedAt: Date.now()
+    });
+    console.log(`[KB] PDF cached in memory: ${filename} (${req.file.buffer.length} bytes)`);
+
+    // Build preview URL — use storage URL if available, else backend stream
+    const previewUrl = pdfUrl || null; // frontend will use /api/knowledge-base/pdf/:filename as fallback
+
+    // ── CHUNK AND EMBED ────────────────────────────────────────────
     const chunkSize = 500;
-    for (let i = 0; i < text.length; i += chunkSize) {
-      chunks.push(text.slice(i, i + chunkSize));
-    }
+    const chunks = [];
+    for (let i = 0; i < text.length; i += chunkSize) chunks.push(text.slice(i, i + chunkSize));
 
     const title = req.file.originalname.replace(/\.pdf$/i, '');
+    const maxChunks = Math.min(chunks.length, 50);
     const inserted = [];
 
-    for (let i = 0; i < Math.min(chunks.length, 50); i++) {
+    for (let i = 0; i < maxChunks; i++) {
       let embedding = null;
-      try { embedding = await generateEmbedding(chunks[i]); } catch (e) {}
+      try { embedding = await generateEmbedding(chunks[i]); } catch (e) { console.error(`[KB] Chunk ${i} embedding failed:`, e.message); }
 
       const { data } = await supabase.from('knowledge_base').insert({
-        title: `${title} (part ${i + 1}/${Math.min(chunks.length, 50)})`,
+        title: `${title} (part ${i + 1}/${maxChunks})`,
         content: chunks[i],
         category: req.body.category || 'product_info',
         source: 'pdf_manual',
         embedding,
         has_pdf: true,
         pdf_filename: filename,
-        pdf_url: pdfUrl,
+        pdf_url: previewUrl,
         created_at: new Date().toISOString()
       }).select('id').single();
+
       if (data) inserted.push(data.id);
     }
 
@@ -135,49 +185,82 @@ router.post('/upload-pdf', upload.single('pdf'), async (req, res) => {
       success: true,
       chunks_stored: inserted.length,
       total_chars: text.length,
-      pdf_url: pdfUrl,
-      filename
+      pdf_url: previewUrl,
+      filename,
+      storage_used: storageSuccess,
+      preview_endpoint: `/api/knowledge-base/pdf/${filename}`
     });
   } catch (err) {
+    console.error('[kb.POST /upload-pdf]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/knowledge-base/pdf/:filename — stream PDF for preview
+// GET /api/knowledge-base/pdf/:filename
+// Serves PDF — tries in-memory cache first, then Supabase storage
 router.get('/pdf/:filename', async (req, res) => {
+  const filename = decodeURIComponent(req.params.filename);
+  console.log(`[KB] PDF request: ${filename}`);
+
+  // 1. Try in-memory cache first (fastest, works immediately after upload)
+  const cached = pdfCache.get(filename);
+  if (cached) {
+    console.log(`[KB] Serving from memory cache: ${filename}`);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${cached.originalName}"`);
+    res.setHeader('Content-Length', cached.buffer.length);
+    return res.send(cached.buffer);
+  }
+
+  // 2. Try Supabase storage
   try {
-    const { data, error } = await supabase.storage
-      .from('manuals')
-      .download(req.params.filename);
-    if (error) return res.status(404).json({ error: 'PDF not found' });
+    console.log(`[KB] Trying storage download: ${filename}`);
+    const { data, error } = await supabase.storage.from('manuals').download(filename);
+
+    if (error) {
+      console.error('[KB] Storage download failed:', error.message);
+      return res.status(404).json({
+        error: 'PDF not found. The file may have expired from cache. Please re-upload the PDF.',
+        hint: 'PDFs are cached temporarily. For permanent storage, ensure the Supabase "manuals" bucket is public.'
+      });
+    }
 
     const buffer = Buffer.from(await data.arrayBuffer());
+    console.log(`[KB] Serving from storage: ${filename} (${buffer.length} bytes)`);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${req.params.filename}"`);
-    res.send(buffer);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+    return res.send(buffer);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[kb.GET /pdf/:filename]', err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/knowledge-base/backfill-embeddings — generate missing embeddings
+// POST /api/knowledge-base/backfill-embeddings
 router.post('/backfill-embeddings', async (req, res) => {
-  const { data: entries } = await supabase
-    .from('knowledge_base').select('id,content').is('embedding', null).limit(50);
+  try {
+    const { data: entries } = await supabase
+      .from('knowledge_base').select('id,content').is('embedding', null).limit(50);
 
-  if (!entries?.length) return res.json({ message: 'No entries need embeddings', count: 0 });
+    if (!entries?.length) return res.json({ message: 'All entries already have embeddings', done: 0, total: 0 });
 
-  let done = 0;
-  for (const entry of entries) {
-    try {
-      const embedding = await generateEmbedding(entry.content);
-      await supabase.from('knowledge_base').update({ embedding }).eq('id', entry.id);
-      done++;
-    } catch (e) { console.error(`Embedding failed for KB ${entry.id}:`, e.message); }
+    let done = 0;
+    for (const entry of entries) {
+      try {
+        const embedding = await generateEmbedding(entry.content);
+        await supabase.from('knowledge_base').update({ embedding }).eq('id', entry.id);
+        done++;
+      } catch (e) {
+        console.error(`[KB] Backfill embedding failed for ${entry.id}:`, e.message);
+      }
+    }
+
+    res.json({ done, total: entries.length, message: done === 0 ? 'HuggingFace API may be unavailable. Check HF_API_KEY.' : `${done}/${entries.length} embeddings generated` });
+  } catch (err) {
+    console.error('[kb.POST /backfill-embeddings]', err.message);
+    res.status(500).json({ error: err.message });
   }
-
-  res.json({ done, total: entries.length });
 });
 
 module.exports = router;
-// CQM v2.0 - 2026-06-25 - Build: final

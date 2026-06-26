@@ -703,8 +703,8 @@ function applyRoleRestrictions(role) {
   const roleAccess = {
     admin:       ['dashboard','scrape-targets','review-queue','answer-queue','knowledge-base','agents','scrape-logs','post-answers','config'],
     manager:     ['dashboard','scrape-targets','review-queue','answer-queue','knowledge-base','agents','scrape-logs','post-answers'],
-    agent_alex:  ['review-queue','answer-queue','knowledge-base'],
-    agent_jamie: ['review-queue','answer-queue','knowledge-base'],
+    agent_alex:  ['review-queue','answer-queue','knowledge-base','post-answers'],
+    agent_jamie: ['review-queue','answer-queue','knowledge-base','post-answers'],
   };
 
   const allowed = roleAccess[role] || roleAccess.admin;
@@ -1087,16 +1087,16 @@ async function refreshReviewQueue() {
   const card = document.getElementById('review-table-card');
   if (!card) return;
   try {
-    const retailer  = document.getElementById('rq-retailer')?.value || '';
-    const category  = document.getElementById('rq-category')?.value || '';
-    const sentiment = document.getElementById('rq-sentiment')?.value || '';
+    const retailer  = filterState.rq.retailer || '';
+    const category  = filterState.rq.category || '';
+    const sentiment = filterState.rq.sentiment || '';
     const agentFilter = getAgentFilter();
 
     const params = new URLSearchParams({ status: 'review', page: reviewPage, limit: 15 });
-    if (retailer)     params.append('retailer', retailer);
-    if (category)     params.append('category', category);
-    if (sentiment)    params.append('sentiment', sentiment);
-    if (agentFilter)  params.append('assigned_to', agentFilter);
+    if (retailer)    params.append('retailer', retailer);
+    if (category)    params.append('category', category);
+    if (sentiment)   params.append('sentiment', sentiment);
+    if (agentFilter) params.append('assigned_to', agentFilter);
     const url = '/questions?' + params.toString();
 
     const { data, total } = await apiFetch(url);
@@ -1281,8 +1281,8 @@ async function refreshAnswerQueue() {
   const card = document.getElementById('answer-table-card');
   if (!card) return;
   try {
-    const retailer = document.getElementById('aq-retailer')?.value || '';
-    const category = document.getElementById('aq-category')?.value || '';
+    const retailer = filterState.aq.retailer || '';
+    const category = filterState.aq.category || '';
     const params = new URLSearchParams({ status: 'answered', page: answerPage, limit: 20 });
     if (retailer) params.append('retailer', retailer);
     if (category) params.append('category', category);
@@ -1294,7 +1294,7 @@ async function refreshAnswerQueue() {
     card.innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr>
-        <th>Date Asked</th><th>Date Answered</th><th>Retailer</th><th>Question</th>
+        <th>Date / Customer</th><th>Date Answered</th><th>Retailer</th><th>Question</th>
         <th>Category</th><th>Sentiment</th><th>Confidence</th><th>Assigned To</th>
       </tr></thead>
       <tbody>${data.map(q=>`
@@ -1394,7 +1394,7 @@ async function refreshKBList(page = 1) {
           <td><span class="badge-pill badge-gray">${e.source||'manual'}</span>${e.has_pdf?` <span class="badge-pill badge-blue">📄 PDF</span>`:''}</td>
           <td style="font-size:12px;color:var(--text-muted)">${e.created_at?new Date(e.created_at).toLocaleDateString():'—'}</td>
           <td><div class="flex gap-2">
-            ${e.has_pdf&&e.pdf_filename?`<button class="btn btn-secondary btn-xs" onclick="previewPDF('${e.pdf_filename}','${e.pdf_url||''}')">👁 PDF</button>`:''}
+            ${e.has_pdf&&e.pdf_filename?`<button class="btn btn-secondary btn-xs" onclick="previewPDF('${e.pdf_filename}',null)">👁 PDF</button>`:''}
             <button class="btn btn-danger btn-xs" onclick="deleteKB('${e.id}')">🗑</button>
           </div></td>
         </tr>`).join('')}
@@ -1491,7 +1491,9 @@ async function uploadPDF(file) {
 }
 
 function previewPDF(filename, url) {
-  const previewUrl = url || (API + '/knowledge-base/pdf/' + encodeURIComponent(filename));
+  // Always use backend stream endpoint - most reliable regardless of storage config
+  const previewUrl = API + '/knowledge-base/pdf/' + encodeURIComponent(filename);
+  console.log('[PDF Preview] URL:', previewUrl);
 
   const existing = document.getElementById('pdf-modal-overlay');
   if (existing) existing.remove();
