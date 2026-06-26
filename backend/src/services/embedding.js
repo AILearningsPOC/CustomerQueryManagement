@@ -72,3 +72,4 @@ async function generateEmbedding(text) {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 module.exports = { generateEmbedding };
+// BUILD: v2.1.202606261112
