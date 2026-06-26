@@ -143,4 +143,4 @@ async function addApprovedAnswerToKB(question, answer, category) {
 
 module.exports = { processQuestion, addApprovedAnswerToKB };
 // CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.1.202606261112
+// BUILD: v2.3.202606261143

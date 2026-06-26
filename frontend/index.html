@@ -1326,21 +1326,19 @@ async function loadKB(page = 1) {
   </div>
   <div class="tab-bar">
     <button class="tab-btn active" id="kb-tab-list" onclick="switchKBTab('list')">KB Entries</button>
-    <button class="tab-btn" id="kb-tab-add" onclick="switchKBTab('add')">Add Entry</button>
     <button class="tab-btn" id="kb-tab-pdf" onclick="switchKBTab('pdf')">Upload PDF Manual</button>
   </div>
   <div id="kb-list-section"></div>
-  <div id="kb-add-section" style="display:none"></div>
   <div id="kb-pdf-section" style="display:none"></div>`;
   renderKBList(page);
-  renderKBAdd();
   renderKBPDF();
 }
 
 function switchKBTab(tab) {
-  ['list','add','pdf'].forEach(t => {
-    document.getElementById(`kb-tab-${t}`)?.classList.toggle('active', t===tab);
-    document.getElementById(`kb-${t}-section`).style.display = t===tab?'':'none';
+  ['list','pdf'].forEach(t => {
+    document.getElementById('kb-tab-' + t)?.classList.toggle('active', t===tab);
+    const el = document.getElementById('kb-' + t + '-section');
+    if (el) el.style.display = t===tab ? '' : 'none';
   });
 }
 
@@ -1382,7 +1380,7 @@ async function refreshKBList(page = 1) {
   const url = '/knowledge-base?' + params.toString();
   try {
     const { data, total } = await apiFetch(url);
-    if (!data?.length) { card.innerHTML = emptyState('📚', 'No KB entries', 'Add entries manually or upload a PDF manual.', 'Add Entry', "switchKBTab('add')"); return; }
+    if (!data?.length) { card.innerHTML = emptyState('📚', 'No KB entries', 'Upload a PDF manual or approve questions from the Review Queue to build your knowledge base.', 'Upload PDF', "switchKBTab('pdf')"); return; }
     card.innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr><th>Title</th><th>Category</th><th>Source</th><th>Date Added</th><th>Actions</th></tr></thead>
@@ -1404,38 +1402,7 @@ async function refreshKBList(page = 1) {
   } catch (e) { card.innerHTML = emptyState('⚠️','Error',e.message); }
 }
 
-function renderKBAdd() {
-  const el = document.getElementById('kb-add-section');
-  el.innerHTML = `
-  <div class="card" style="max-width:640px">
-    <div class="card-title">+ Add KB Entry</div>
-    <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="kb-title" placeholder="Entry title or question"></div>
-    <div class="form-group"><label class="form-label">Content</label><textarea class="form-textarea" id="kb-content" style="min-height:140px" placeholder="Knowledge base content, answer, or policy..."></textarea></div>
-    <div class="form-group"><label class="form-label">Category</label>
-      <select class="form-select" id="kb-new-cat">
-        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
-      </select>
-    </div>
-    <button class="btn btn-primary" onclick="saveKBEntry()">💾 Save & Embed</button>
-  </div>`;
-}
 
-async function saveKBEntry() {
-  const title = document.getElementById('kb-title')?.value;
-  const content = document.getElementById('kb-content')?.value;
-  const category = document.getElementById('kb-new-cat')?.value;
-  if (!content) return toast('Content required','error');
-  try {
-    await apiFetch('/knowledge-base', { method:'POST', body: JSON.stringify({ title, content, category }) });
-    toast('KB entry saved with vector embedding', 'success');
-    const titleEl = document.getElementById('kb-title');
-    const contentEl = document.getElementById('kb-content');
-    if (titleEl) titleEl.value = '';
-    if (contentEl) contentEl.value = '';
-    switchKBTab('list');
-    await refreshKBList();
-  } catch(e) { toast('Failed to save KB entry: ' + e.message, 'error'); }
-}
 
 function renderKBPDF() {
   const el = document.getElementById('kb-pdf-section');
@@ -1912,6 +1879,6 @@ function pagination(total, page, limit, fn) {
 }
 </script>
 
-<!-- BUILD: v2.1.202606261112 -->
+<!-- BUILD: v2.3.202606261143 -->
 </body>
 </html>

@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../utils/supabase');
-const { processQuestion } = require('../services/enrichment');
 
-// GET /api/questions
+// GET /api/questions — list with filters + pagination
 router.get('/', async (req, res) => {
   try {
     const { status, retailer, category, sentiment, assigned_to, page = 1, limit = 20 } = req.query;
@@ -58,41 +57,6 @@ router.get('/:id', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('[questions.GET /:id]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/questions
-router.post('/', async (req, res) => {
-  try {
-    const { question_text, retailer, product_name, product_url, customer_name } = req.body;
-    if (!question_text || !question_text.trim()) {
-      return res.status(400).json({ error: 'question_text is required' });
-    }
-
-    const crypto = require('crypto');
-    const hash = crypto.createHash('md5').update(question_text.toLowerCase().trim()).digest('hex');
-
-    const { data: existing } = await supabase.from('questions').select('id').eq('content_hash', hash).single();
-    if (existing) return res.status(409).json({ error: 'Duplicate question', id: existing.id });
-
-    const { data, error } = await supabase.from('questions').insert({
-      question_text: question_text.trim(),
-      retailer, product_name, product_url, customer_name,
-      content_hash: hash, status: 'pending', source: 'manual',
-      created_at: new Date().toISOString()
-    }).select().single();
-
-    if (error) return res.status(500).json({ error: error.message });
-
-    // Process asynchronously — don't block response
-    processQuestion(data.id).catch(err => {
-      console.error(`[questions] Async enrichment failed for ${data.id}:`, err.message);
-    });
-
-    res.status(201).json(data);
-  } catch (err) {
-    console.error('[questions.POST /]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -164,18 +128,5 @@ router.patch('/:id/draft', async (req, res) => {
   }
 });
 
-// DELETE /api/questions/:id
-router.delete('/:id', async (req, res) => {
-  try {
-    const { error } = await supabase.from('questions').delete().eq('id', req.params.id);
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ success: true });
-  } catch (err) {
-    console.error('[questions.DELETE /:id]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
 module.exports = router;
-// CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.1.202606261112
+// BUILD: v2.3.202606261143

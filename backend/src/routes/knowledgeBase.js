@@ -44,44 +44,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST /api/knowledge-base
-router.post('/', async (req, res) => {
-  try {
-    const { title, content, category, source } = req.body;
-    if (!content) return res.status(400).json({ error: 'content required' });
 
-    let embedding = null;
-    try { embedding = await generateEmbedding(content); } catch (e) { console.error('[kb] Embedding error:', e.message); }
-
-    const { data, error } = await supabase.from('knowledge_base').insert({
-      title, content, category: category || 'other',
-      source: source || 'manual', embedding,
-      created_at: new Date().toISOString()
-    }).select().single();
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.status(201).json(data);
-  } catch (err) {
-    console.error('[kb.POST /]', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// PUT /api/knowledge-base/:id
-router.put('/:id', async (req, res) => {
-  try {
-    const { title, content, category } = req.body;
-    let embedding = null;
-    if (content) { try { embedding = await generateEmbedding(content); } catch (e) {} }
-    const updates = { title, content, category, updated_at: new Date().toISOString() };
-    if (embedding) updates.embedding = embedding;
-    const { data, error } = await supabase.from('knowledge_base').update(updates).eq('id', req.params.id).select().single();
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // DELETE /api/knowledge-base/:id
 router.delete('/:id', async (req, res) => {
@@ -264,4 +227,4 @@ router.post('/backfill-embeddings', async (req, res) => {
 });
 
 module.exports = router;
-// BUILD: v2.1.202606261112
+// BUILD: v2.3.202606261143
