@@ -40,28 +40,48 @@ async function scrapeBestBuy(url) {
   const skuMatch = url.match(/\/(\d{7,8})(?:\/|$|\?|#)/);
   if (!skuMatch) throw new Error(`Cannot extract SKU from BestBuy URL: ${url}`);
   const sku = skuMatch[1];
-  const bbApiUrl = `https://www.bestbuy.com/ugc/v2/questions?page=1&pageSize=30&sku=${sku}&sort=MOST_RECENT&source=pr`;
-  console.log(`[BestBuy] Fetching Q&A for SKU ${sku}`);
-  let data;
+  console.log(`[BestBuy] Scraping SKU ${sku} from: ${url}`);
+
+  // Strategy 1: BestBuy JSON API (fast, structured)
+  const jsonApiUrl = `https://www.bestbuy.com/ugc/v2/questions?page=1&pageSize=30&sku=${sku}&sort=MOST_RECENT&source=pr`;
+  let questions = [];
+
   try {
-    const raw = await proxyRequest(bbApiUrl, true);
-    data = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    console.log('[BestBuy] API response keys: ' + Object.keys(data).join(', '));
-    console.log('[BestBuy] totalResults: ' + data.totalResults);
+    const raw = await proxyRequest(jsonApiUrl, true);
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const total = data?.totalResults || 0;
+    console.log(`[BestBuy] JSON API: totalResults=${total}, keys=${Object.keys(data).join(',')}`);
+
+    const arr = data?.questions || data?.results || data?.topics || [];
+    if (arr.length > 0) {
+      questions = arr.map(q => ({
+        question_text: (q.questionText || q.question || '').trim(),
+        existing_answer: q.answers?.[0]?.answerText || null,
+        answer_status: (q.answers?.length > 0) ? 'answered' : 'unanswered',
+        date_asked: q.submissionTime ? new Date(q.submissionTime).toISOString() : null,
+        customer_name: q.userNickname || null
+      })).filter(q => q.question_text.length > 5);
+      console.log(`[BestBuy] JSON API found ${questions.length} questions`);
+      return questions;
+    }
+    console.log('[BestBuy] JSON API returned 0 — trying HTML render fallback');
   } catch (err) {
-    console.warn('[BestBuy] JSON API failed: ' + err.message + ', trying HTML fallback');
-    const html = await proxyRequest(url, false);
-    return parseBestBuyHTML(html);
+    console.warn('[BestBuy] JSON API error: ' + err.message + ' — trying HTML render');
   }
-  const questions = data?.questions || data?.results || data?.topics || [];
-  console.log('[BestBuy] Parsed ' + questions.length + ' questions for SKU ' + sku);
-  return questions.map(q => ({
-    question_text: (q.questionText || q.question || '').trim(),
-    existing_answer: q.answers?.[0]?.answerText || null,
-    answer_status: (q.answers?.length > 0) ? 'answered' : 'unanswered',
-    date_asked: q.submissionTime ? new Date(q.submissionTime).toISOString() : null,
-    customer_name: q.userNickname || null
-  })).filter(q => q.question_text.length > 5);
+
+  // Strategy 2: Render the actual questions page HTML
+  // ScraperAPI with render=true executes JavaScript and loads full Q&A content
+  try {
+    console.log('[BestBuy] Fetching rendered HTML page: ' + url);
+    const html = await proxyRequest(url, false);
+    console.log('[BestBuy] HTML page size: ' + html.length + ' chars');
+    const parsed = parseBestBuyHTML(html);
+    console.log('[BestBuy] HTML parse found: ' + parsed.length + ' questions');
+    return parsed;
+  } catch (err) {
+    console.error('[BestBuy] HTML fallback failed: ' + err.message);
+    return [];
+  }
 }
 
 function parseBestBuyHTML(html) {
@@ -377,4 +397,4 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 
 module.exports = { scrapeAll, scrapeTarget: scrapeTargetItem };
-// BUILD: v2.5.20260628205630
+// BUILD: v2.5.20260628210502
