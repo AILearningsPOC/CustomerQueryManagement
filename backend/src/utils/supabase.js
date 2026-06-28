@@ -5,4 +5,4 @@ const supabase = createClient(
   { auth: { persistSession: false } }
 );
 module.exports = supabase;
-// BUILD: v2.5.20260628202701
+// BUILD: v2.5.20260628205630

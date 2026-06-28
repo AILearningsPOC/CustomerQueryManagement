@@ -31,4 +31,4 @@ process.on('unhandledRejection', (reason) => console.error('[UnhandledRejection]
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`CQM v2.4 backend running on port ${PORT}`));
-// BUILD: v2.5.20260628202701
+// BUILD: v2.5.20260628205630

@@ -6,11 +6,30 @@ const crypto = require('crypto');
 async function proxyRequest(targetUrl, asJson = false) {
   const key = process.env.SCRAPERAPI_KEY;
   if (!key) throw new Error('SCRAPERAPI_KEY not configured');
-  const params = new URLSearchParams({ api_key: key, url: targetUrl, country_code: 'us', keep_headers: 'true' });
-  if (!asJson) params.append('render', 'true');
-  const response = await axios.get(`http://api.scraperapi.com?${params.toString()}`, {
-    timeout: 60000,
-    headers: { 'Accept': asJson ? 'application/json' : 'text/html', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+
+  const params = new URLSearchParams({
+    api_key: key,
+    url: targetUrl,
+    country_code: 'us',
+  });
+
+  if (asJson) {
+    // JSON API: no JS rendering needed, but pass headers to get JSON response
+    params.append('keep_headers', 'true');
+  } else {
+    // HTML page: need JS rendering
+    params.append('render', 'true');
+    params.append('keep_headers', 'true');
+  }
+
+  const response = await axios.get('http://api.scraperapi.com?' + params.toString(), {
+    timeout: 90000,
+    headers: {
+      'Accept': asJson ? 'application/json, text/plain, */*' : 'text/html,application/xhtml+xml',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      'Referer': 'https://www.bestbuy.com',
+    },
     decompress: true
   });
   return response.data;
@@ -25,15 +44,17 @@ async function scrapeBestBuy(url) {
   console.log(`[BestBuy] Fetching Q&A for SKU ${sku}`);
   let data;
   try {
-    data = await proxyRequest(bbApiUrl, true);
-    if (typeof data === 'string') data = JSON.parse(data);
+    const raw = await proxyRequest(bbApiUrl, true);
+    data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    console.log('[BestBuy] API response keys: ' + Object.keys(data).join(', '));
+    console.log('[BestBuy] totalResults: ' + data.totalResults);
   } catch (err) {
-    console.warn(`[BestBuy] JSON API failed: ${err.message}, trying HTML fallback`);
+    console.warn('[BestBuy] JSON API failed: ' + err.message + ', trying HTML fallback');
     const html = await proxyRequest(url, false);
     return parseBestBuyHTML(html);
   }
   const questions = data?.questions || data?.results || data?.topics || [];
-  console.log(`[BestBuy] Found ${questions.length} questions for SKU ${sku}`);
+  console.log('[BestBuy] Parsed ' + questions.length + ' questions for SKU ' + sku);
   return questions.map(q => ({
     question_text: (q.questionText || q.question || '').trim(),
     existing_answer: q.answers?.[0]?.answerText || null,
@@ -356,4 +377,4 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 
 module.exports = { scrapeAll, scrapeTarget: scrapeTargetItem };
-// BUILD: v2.5.20260628202701
+// BUILD: v2.5.20260628205630
