@@ -1,0 +1,234 @@
+const axios = require('axios');
+const supabase = require('../utils/supabase');
+const crypto = require('crypto');
+
+// ScraperAPI proxy — rotates IPs to bypass rate limiting
+async function proxyRequest(targetUrl, asJson = false) {
+  const key = process.env.SCRAPERAPI_KEY;
+  if (!key) throw new Error('SCRAPERAPI_KEY not configured');
+  const params = new URLSearchParams({ api_key: key, url: targetUrl, country_code: 'us', keep_headers: 'true' });
+  if (!asJson) params.append('render', 'true');
+  const response = await axios.get(`http://api.scraperapi.com?${params.toString()}`, {
+    timeout: 60000,
+    headers: { 'Accept': asJson ? 'application/json' : 'text/html', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    decompress: true
+  });
+  return response.data;
+}
+
+// BestBuy — calls JSON API directly (no HTML parsing needed)
+async function scrapeBestBuy(url) {
+  const skuMatch = url.match(/\/(\d{7,8})(?:\/|$|\?|#)/);
+  if (!skuMatch) throw new Error(`Cannot extract SKU from BestBuy URL: ${url}`);
+  const sku = skuMatch[1];
+  const bbApiUrl = `https://www.bestbuy.com/ugc/v2/questions?page=1&pageSize=30&sku=${sku}&sort=MOST_RECENT&source=pr`;
+  console.log(`[BestBuy] Fetching Q&A for SKU ${sku}`);
+  let data;
+  try {
+    data = await proxyRequest(bbApiUrl, true);
+    if (typeof data === 'string') data = JSON.parse(data);
+  } catch (err) {
+    console.warn(`[BestBuy] JSON API failed: ${err.message}, trying HTML fallback`);
+    const html = await proxyRequest(url, false);
+    return parseBestBuyHTML(html);
+  }
+  const questions = data?.questions || data?.results || data?.topics || [];
+  console.log(`[BestBuy] Found ${questions.length} questions for SKU ${sku}`);
+  return questions.map(q => ({
+    question_text: (q.questionText || q.question || '').trim(),
+    existing_answer: q.answers?.[0]?.answerText || null,
+    answer_status: (q.answers?.length > 0) ? 'answered' : 'unanswered',
+    date_asked: q.submissionTime ? new Date(q.submissionTime).toISOString() : null,
+    customer_name: q.userNickname || null
+  })).filter(q => q.question_text.length > 5);
+}
+
+function parseBestBuyHTML(html) {
+  if (!html || html.length < 100) return [];
+  try {
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (m) { const found = extractQAFromJSON(JSON.parse(m[1])); if (found.length > 0) return found; }
+  } catch (e) {}
+  const qMatches = [...html.matchAll(/"questionText"\s*:\s*"([^"]{10,500})"/g)];
+  const aMatches = [...html.matchAll(/"answerText"\s*:\s*"([^"]{5,500})"/g)];
+  if (qMatches.length > 0) {
+    return qMatches.map((m, i) => ({ question_text: decodeStr(m[1]), existing_answer: aMatches[i] ? decodeStr(aMatches[i][1]) : null, answer_status: aMatches[i] ? 'answered' : 'unanswered', date_asked: null, customer_name: null })).filter(q => q.question_text.length > 5);
+  }
+  return [];
+}
+
+// Amazon — HTML scraping with data-hook selectors
+async function scrapeAmazon(url) {
+  const asinMatch = url.match(/\/(?:dp|asin|ask\/questions\/asin)\/([A-Z0-9]{10})/);
+  if (!asinMatch) throw new Error(`Cannot extract ASIN from Amazon URL: ${url}`);
+  const asin = asinMatch[1];
+  console.log(`[Amazon] Fetching Q&A for ASIN ${asin}`);
+  const html = await proxyRequest(`https://www.amazon.com/ask/questions/asin/${asin}/1?isAnswered=false`, false);
+  return parseAmazonHTML(html);
+}
+
+function parseAmazonHTML(html) {
+  if (!html || html.length < 100) return [];
+  const hookMatches = [...html.matchAll(/data-hook="ask-btf-question-text"[^>]*>([\s\S]{5,500}?)<\/span>/gi)];
+  if (hookMatches.length > 0) {
+    const answerHooks = [...html.matchAll(/data-hook="ask-btf-answer-text"[^>]*>([\s\S]{5,500}?)<\/span>/gi)];
+    const dateHooks = [...html.matchAll(/data-hook="ask-btf-question-date"[^>]*>([\s\S]{5,100}?)<\/span>/gi)];
+    const authorHooks = [...html.matchAll(/data-hook="ask-btf-answer-author"[^>]*>([\s\S]{5,100}?)<\/span>/gi)];
+    return hookMatches.map((m, i) => ({
+      question_text: stripTags(m[1]).trim(),
+      existing_answer: answerHooks[i] ? stripTags(answerHooks[i][1]).trim() : null,
+      answer_status: answerHooks[i] ? 'answered' : 'unanswered',
+      date_asked: dateHooks[i] ? parseDate(stripTags(dateHooks[i][1]).trim()) : null,
+      customer_name: authorHooks[i] ? stripTags(authorHooks[i][1]).trim() : null
+    })).filter(q => q.question_text.length > 5);
+  }
+  return [];
+}
+
+// Target — BazaarVoice API
+async function scrapeTarget(url) {
+  const tcinMatch = url.match(/A-(\d{7,9})(?:\/|$|\?|#)/);
+  if (!tcinMatch) throw new Error(`Cannot extract TCIN from Target URL: ${url}`);
+  const tcin = tcinMatch[1];
+  console.log(`[Target] Fetching Q&A for TCIN ${tcin}`);
+  const html = await proxyRequest(url, false);
+  const passkeyMatch = html.match(/["']passkey["']\s*[:=]\s*["']([A-Za-z0-9]{20,60})["']/);
+  if (passkeyMatch) {
+    const res = await axios.get(`https://api.bazaarvoice.com/data/questions.json?passkey=${passkeyMatch[1]}&apiversion=5.4&filter=ProductId:${tcin}&include=Answers&limit=20`, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 15000 });
+    return (res.data?.Results || []).map(q => ({ question_text: q.QuestionSummary || '', existing_answer: q.Answers?.[0]?.AnswerText || null, answer_status: q.Answers?.length > 0 ? 'answered' : 'unanswered', date_asked: q.SubmissionTime ? new Date(q.SubmissionTime).toISOString() : null, customer_name: q.UserNickname || null })).filter(q => q.question_text.length > 5);
+  }
+  return extractQAFromJSON(html);
+}
+
+// Apify — real browser scraping (bypasses bot detection)
+async function scrapeWithApify(url) {
+  const key = process.env.APIFY_API_KEY;
+  if (!key) throw new Error('APIFY_API_KEY not configured');
+
+  // apify~web-scraper (FREE, public actor - uses headless Chromium)
+  const actorId = 'apify~web-scraper';
+
+  // pageFunction uses web-scraper v3 API: destructured context with page object
+  const pageFunction = `async function pageFunction({ page, request, log }) {
+    log.info('Scraping: ' + request.url);
+    
+    // Wait for Q&A content to render
+    try { await page.waitForSelector('[data-testid="question-text"], [data-hook="ask-btf-question-text"]', { timeout: 8000 }); }
+    catch(e) { log.info('Q&A selectors not found, trying generic extraction'); }
+
+    await page.waitForTimeout(3000);
+
+    const results = await page.evaluate(() => {
+      const questions = [];
+
+      // BestBuy Q&A selectors
+      const bbSelectors = [
+        '[data-testid="question-text"]',
+        '.ugc-question .question-text',
+        '[class*="question-body"]',
+        '[class*="QuestionText"]',
+        '.c-q-and-a-description'
+      ];
+      for (const sel of bbSelectors) {
+        const els = document.querySelectorAll(sel);
+        if (els.length > 0) {
+          els.forEach(el => {
+            const t = el.innerText ? el.innerText.trim() : el.textContent.trim();
+            if (t.length > 5) questions.push({ question_text: t, existing_answer: null, answer_status: 'unanswered', date_asked: null, customer_name: null });
+          });
+          break;
+        }
+      }
+
+      // Amazon Q&A selectors
+      document.querySelectorAll('[data-hook="ask-btf-question-text"]').forEach(el => {
+        const t = el.innerText ? el.innerText.trim() : el.textContent.trim();
+        if (t.length > 5) questions.push({ question_text: t, existing_answer: null, answer_status: 'unanswered', date_asked: null, customer_name: null });
+      });
+
+      // Generic fallback - any question-ending text
+      if (questions.length === 0) {
+        document.querySelectorAll('span, p, div, h3').forEach(el => {
+          if (el.children.length === 0) {
+            const t = el.innerText ? el.innerText.trim() : '';
+            if (t.endsWith('?') && t.length > 15 && t.length < 400) {
+              questions.push({ question_text: t, existing_answer: null, answer_status: 'unanswered', date_asked: null, customer_name: null });
+            }
+          }
+        });
+      }
+
+      // Deduplicate
+      return [...new Map(questions.map(q => [q.question_text, q])).values()].slice(0, 30);
+    });
+
+    log.info('Found ' + results.length + ' questions');
+    return results;
+  }`;
+
+  console.log('[Apify] Starting web-scraper run for: ' + url);
+
+  let startRes;
+  try {
+    startRes = await axios.post(
+      'https://api.apify.com/v2/acts/' + actorId + '/runs',
+      {
+        startUrls: [{ url: url }],
+        maxRequestsPerCrawl: 1,
+        maxConcurrency: 1,
+        pageFunction: pageFunction,
+        proxyConfiguration: { useApifyProxy: true }
+      },
+      {
+        params: { token: key },
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000
+      }
+    );
+  } catch (err) {
+    const status = err.response?.status;
+    const msg = err.response?.data?.error?.message || err.message;
+    if (status === 403) throw new Error('Apify 403: Account may need email verification. Check apify.com → Settings → Account. Message: ' + msg);
+    if (status === 401) throw new Error('Apify 401: Invalid API token. Update APIFY_API_KEY in Render environment. Message: ' + msg);
+    if (status === 402) throw new Error('Apify 402: No compute units. Check apify.com → Billing. Message: ' + msg);
+    throw new Error('Apify start failed (' + status + '): ' + msg);
+  }
+
+  const runId = startRes.data.data.id;
+  console.log('[Apify] Run started: ' + runId);
+
+  // Poll for completion (max 3 min)
+  let runStatus = 'RUNNING';
+  for (let i = 0; i < 18; i++) {
+    await sleep(10000);
+    try {
+      const s = await axios.get(
+        'https://api.apify.com/v2/actor-runs/' + runId,
+        { params: { token: key } }
+      );
+      runStatus = s.data.data.status;
+      console.log('[Apify] Run ' + runId + ' status: ' + runStatus);
+      if (runStatus === 'SUCCEEDED') break;
+      if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(runStatus)) {
+        throw new Error('Apify run ' + runStatus);
+      }
+    } catch (pollErr) {
+      console.error('[Apify] Poll error:', pollErr.message);
+    }
+  }
+
+  if (runStatus !== 'SUCCEEDED') throw new Error('Apify run did not complete: ' + runStatus);
+
+  const res = await axios.get(
+    'https://api.apify.com/v2/actor-runs/' + runId + '/dataset/items',
+    { params: { token: key } }
+  );
+
+  const items = res.data || [];
+  console.log('[Apify] Dataset returned ' + items.length + ' items');
+  return items.filter(q => q.question_text && q.question_text.length > 5);
+}
+
+
+module.exports = { scrapeAll, scrapeTarget: scrapeTargetItem };
+// BUILD: v2.5.20260628190134
