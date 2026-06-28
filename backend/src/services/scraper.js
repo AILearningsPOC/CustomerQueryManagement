@@ -100,84 +100,80 @@ async function scrapeTarget(url) {
   return extractQAFromJSON(html);
 }
 
-// Apify — real browser scraping (bypasses bot detection)
-async function scrapeWithApify(url) {
+// Apify — uses residential IPs to fetch BestBuy/Amazon JSON APIs
+// Much faster than HTML rendering — calls JSON API directly through Apify proxy
+async function scrapeWithApify(url, retailer) {
   const key = process.env.APIFY_API_KEY;
   if (!key) throw new Error('APIFY_API_KEY not configured');
 
-  // apify~web-scraper (FREE, public actor - uses headless Chromium)
-  const actorId = 'apify~web-scraper';
+  // Build the correct API URL to fetch based on retailer
+  let apiUrl = url;
+  if (retailer === 'bestbuy') {
+    const skuMatch = url.match(/\/([0-9]{7,8})(?:\/|$|\?|#)/);
+    if (skuMatch) {
+      apiUrl = 'https://www.bestbuy.com/ugc/v2/questions?page=1&pageSize=30&sku=' + skuMatch[1] + '&sort=MOST_RECENT&source=pr';
+    }
+  } else if (retailer === 'amazon') {
+    const asinMatch = url.match(/\/(?:dp|asin|ask\/questions\/asin)\/([A-Z0-9]{10})/);
+    if (asinMatch) {
+      apiUrl = 'https://www.amazon.com/ask/questions/asin/' + asinMatch[1] + '/1?isAnswered=false';
+    }
+  }
 
-  // pageFunction uses web-scraper v3 API: destructured context with page object
-  const pageFunction = `async function pageFunction({ page, request, log }) {
-    log.info('Scraping: ' + request.url);
+  // pageFunction: use fetch() inside the browser to call the API
+  // This uses Apify residential IPs which bypass BestBuy/Amazon IP blocks
+  const pageFn = `async function pageFunction({ page, request, log }) {
+    log.info('Fetching Q&A API: ' + request.url);
     
-    // Wait for Q&A content to render
-    try { await page.waitForSelector('[data-testid="question-text"], [data-hook="ask-btf-question-text"]', { timeout: 8000 }); }
-    catch(e) { log.info('Q&A selectors not found, trying generic extraction'); }
-
-    await page.waitForTimeout(3000);
-
-    const results = await page.evaluate(() => {
-      const questions = [];
-
-      // BestBuy Q&A selectors
-      const bbSelectors = [
-        '[data-testid="question-text"]',
-        '.ugc-question .question-text',
-        '[class*="question-body"]',
-        '[class*="QuestionText"]',
-        '.c-q-and-a-description'
-      ];
-      for (const sel of bbSelectors) {
-        const els = document.querySelectorAll(sel);
-        if (els.length > 0) {
-          els.forEach(el => {
-            const t = el.innerText ? el.innerText.trim() : el.textContent.trim();
-            if (t.length > 5) questions.push({ question_text: t, existing_answer: null, answer_status: 'unanswered', date_asked: null, customer_name: null });
-          });
-          break;
-        }
-      }
-
-      // Amazon Q&A selectors
-      document.querySelectorAll('[data-hook="ask-btf-question-text"]').forEach(el => {
-        const t = el.innerText ? el.innerText.trim() : el.textContent.trim();
-        if (t.length > 5) questions.push({ question_text: t, existing_answer: null, answer_status: 'unanswered', date_asked: null, customer_name: null });
-      });
-
-      // Generic fallback - any question-ending text
-      if (questions.length === 0) {
-        document.querySelectorAll('span, p, div, h3').forEach(el => {
-          if (el.children.length === 0) {
-            const t = el.innerText ? el.innerText.trim() : '';
-            if (t.endsWith('?') && t.length > 15 && t.length < 400) {
-              questions.push({ question_text: t, existing_answer: null, answer_status: 'unanswered', date_asked: null, customer_name: null });
-            }
+    const result = await page.evaluate(async (targetUrl) => {
+      try {
+        const res = await fetch(targetUrl, {
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.bestbuy.com',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           }
         });
+        const text = await res.text();
+        return { status: res.status, body: text };
+      } catch(e) {
+        return { status: 0, body: '', error: e.message };
       }
-
-      // Deduplicate
-      return [...new Map(questions.map(q => [q.question_text, q])).values()].slice(0, 30);
-    });
-
-    log.info('Found ' + results.length + ' questions');
-    return results;
+    }, targetUrl);
+    
+    log.info('Response status: ' + result.status);
+    if (result.status !== 200) return [];
+    
+    try {
+      const data = JSON.parse(result.body);
+      const questions = data.questions || data.results || data.topics || [];
+      log.info('Questions found: ' + questions.length);
+      return questions.map(q => ({
+        question_text: q.questionText || q.question || q.text || '',
+        existing_answer: q.answers && q.answers[0] ? q.answers[0].answerText : null,
+        answer_status: q.answers && q.answers.length > 0 ? 'answered' : 'unanswered',
+        date_asked: q.submissionTime ? new Date(q.submissionTime).toISOString() : null,
+        customer_name: q.userNickname || null
+      })).filter(q => q.question_text && q.question_text.length > 5);
+    } catch(e) {
+      log.warning('JSON parse failed: ' + e.message);
+      return [];
+    }
   }`;
 
-  console.log('[Apify] Starting web-scraper run for: ' + url);
+  console.log('[Apify] Fetching via residential proxy: ' + apiUrl);
 
   let startRes;
   try {
     startRes = await axios.post(
-      'https://api.apify.com/v2/acts/' + actorId + '/runs',
+      'https://api.apify.com/v2/acts/apify~web-scraper/runs',
       {
-        startUrls: [{ url: url }],
+        startUrls: [{ url: apiUrl }],
         maxRequestsPerCrawl: 1,
         maxConcurrency: 1,
-        pageFunction: pageFunction,
-        proxyConfiguration: { useApifyProxy: true }
+        pageFunction: pageFn,
+        timeoutSecs: 120
       },
       {
         params: { token: key },
@@ -188,44 +184,37 @@ async function scrapeWithApify(url) {
   } catch (err) {
     const status = err.response?.status;
     const msg = err.response?.data?.error?.message || err.message;
-    if (status === 403) throw new Error('Apify 403: Account may need email verification. Check apify.com → Settings → Account. Message: ' + msg);
-    if (status === 401) throw new Error('Apify 401: Invalid API token. Update APIFY_API_KEY in Render environment. Message: ' + msg);
-    if (status === 402) throw new Error('Apify 402: No compute units. Check apify.com → Billing. Message: ' + msg);
+    if (status === 403) throw new Error('Apify 403: Approve actor permissions at https://console.apify.com/actors/moJRLRc85AitArpNN?approvePermissions=true — ' + msg);
+    if (status === 401) throw new Error('Apify 401: Invalid API token. Update APIFY_API_KEY in Render. — ' + msg);
+    if (status === 402) throw new Error('Apify 402: No compute units remaining. Check apify.com/billing — ' + msg);
     throw new Error('Apify start failed (' + status + '): ' + msg);
   }
 
   const runId = startRes.data.data.id;
   console.log('[Apify] Run started: ' + runId);
 
-  // Poll for completion (max 3 min)
-  let runStatus = 'RUNNING';
-  for (let i = 0; i < 18; i++) {
+  // Poll for completion — 90 attempts x 10s = 15 min max
+  let finalStatus = 'RUNNING';
+  for (let i = 0; i < 90; i++) {
     await sleep(10000);
     try {
-      const s = await axios.get(
-        'https://api.apify.com/v2/actor-runs/' + runId,
-        { params: { token: key } }
-      );
-      runStatus = s.data.data.status;
-      console.log('[Apify] Run ' + runId + ' status: ' + runStatus);
-      if (runStatus === 'SUCCEEDED') break;
-      if (['FAILED', 'ABORTED', 'TIMED-OUT'].includes(runStatus)) {
-        throw new Error('Apify run ' + runStatus);
-      }
+      const s = await axios.get('https://api.apify.com/v2/actor-runs/' + runId, { params: { token: key } });
+      finalStatus = s.data.data.status;
+      const elapsed = ((i + 1) * 10);
+      console.log('[Apify] Poll ' + (i+1) + '/90 (' + elapsed + 's elapsed) — status: ' + finalStatus);
+      if (finalStatus === 'SUCCEEDED') break;
+      if (['FAILED','ABORTED','TIMED-OUT'].includes(finalStatus)) throw new Error('Apify run ' + finalStatus);
     } catch (pollErr) {
-      console.error('[Apify] Poll error:', pollErr.message);
+      if (pollErr.message.startsWith('Apify run')) throw pollErr;
+      console.warn('[Apify] Poll error (non-fatal):', pollErr.message);
     }
   }
 
-  if (runStatus !== 'SUCCEEDED') throw new Error('Apify run did not complete: ' + runStatus);
+  if (finalStatus !== 'SUCCEEDED') throw new Error('Apify run still ' + finalStatus + ' after 15 min — will retry next scheduled scrape');
 
-  const res = await axios.get(
-    'https://api.apify.com/v2/actor-runs/' + runId + '/dataset/items',
-    { params: { token: key } }
-  );
-
-  const items = res.data || [];
-  console.log('[Apify] Dataset returned ' + items.length + ' items');
+  const res = await axios.get('https://api.apify.com/v2/actor-runs/' + runId + '/dataset/items', { params: { token: key } });
+  const items = [].concat(...(res.data || []));
+  console.log('[Apify] Got ' + items.length + ' questions from dataset');
   return items.filter(q => q.question_text && q.question_text.length > 5);
 }
 
@@ -243,7 +232,7 @@ async function scrapeTargetItem(target, engine) {
     let rawQuestions = [];
 
     if (engine === 'apify') {
-      rawQuestions = await scrapeWithApify(target.url).catch(e => {
+      rawQuestions = await scrapeWithApify(target.url, target.retailer).catch(e => {
         log.error = e.message;
         console.error('[scrapeTargetItem] Apify failed:', e.message);
         return [];
@@ -367,4 +356,4 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 
 module.exports = { scrapeAll, scrapeTarget: scrapeTargetItem };
-// BUILD: v2.5.20260628200116
+// BUILD: v2.5.20260628202701
