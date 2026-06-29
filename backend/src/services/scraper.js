@@ -53,16 +53,28 @@ async function scrapeBestBuy(url) {
     console.log(`[BestBuy] JSON API: totalResults=${total}, keys=${Object.keys(data).join(',')}`);
 
     const arr = data?.questions || data?.results || data?.topics || [];
+    console.log('[BestBuy] arr.length: ' + arr.length + ', totalResults: ' + data?.totalResults);
     if (arr.length > 0) {
+      // Log first item to diagnose field names
+      console.log('[BestBuy] First item keys: ' + Object.keys(arr[0]).join(', '));
+      console.log('[BestBuy] First item sample: ' + JSON.stringify(arr[0]).substring(0, 300));
       questions = arr.map(q => ({
-        question_text: (q.questionText || q.question || '').trim(),
-        existing_answer: q.answers?.[0]?.answerText || null,
+        // Try every possible field name BestBuy might use
+        question_text: (
+          q.questionText || q.question || q.text || q.body ||
+          q.summary || q.title || q.content || q.questionSummary || ''
+        ).trim(),
+        existing_answer: (
+          q.answers?.[0]?.answerText || q.answers?.[0]?.text ||
+          q.answers?.[0]?.body || q.answer || null
+        ),
         answer_status: (q.answers?.length > 0) ? 'answered' : 'unanswered',
         date_asked: q.submissionTime ? new Date(q.submissionTime).toISOString() : null,
-        customer_name: q.userNickname || null
+        customer_name: q.userNickname || q.author || q.authorName || null
       })).filter(q => q.question_text.length > 5);
-      console.log(`[BestBuy] JSON API found ${questions.length} questions`);
-      return questions;
+      console.log('[BestBuy] JSON API found ' + questions.length + ' questions after mapping');
+      if (questions.length > 0) return questions;
+      console.log('[BestBuy] Mapping produced 0 — field names must differ, trying HTML fallback');
     }
     console.log('[BestBuy] JSON API returned 0 — trying HTML render fallback');
   } catch (err) {
