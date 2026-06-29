@@ -59,18 +59,16 @@ async function scrapeBestBuy(url) {
       console.log('[BestBuy] First item keys: ' + Object.keys(arr[0]).join(', '));
       console.log('[BestBuy] First item sample: ' + JSON.stringify(arr[0]).substring(0, 300));
       questions = arr.map(q => ({
-        // Try every possible field name BestBuy might use
-        question_text: (
-          q.questionText || q.question || q.text || q.body ||
-          q.summary || q.title || q.content || q.questionSummary || ''
-        ).trim(),
+        // BestBuy API uses questionTitle (questionText is always null)
+        // Answers are in answersForQuestion array (not answers)
+        question_text: (q.questionTitle || q.questionText || q.question || q.text || '').trim(),
         existing_answer: (
-          q.answers?.[0]?.answerText || q.answers?.[0]?.text ||
-          q.answers?.[0]?.body || q.answer || null
+          q.answersForQuestion?.[0]?.answerText ||
+          q.answers?.[0]?.answerText || null
         ),
-        answer_status: (q.answers?.length > 0) ? 'answered' : 'unanswered',
+        answer_status: ((q.answersForQuestion?.length || q.answers?.length || 0) > 0) ? 'answered' : 'unanswered',
         date_asked: q.submissionTime ? new Date(q.submissionTime).toISOString() : null,
-        customer_name: q.userNickname || q.author || q.authorName || null
+        customer_name: q.userNickname || null
       })).filter(q => q.question_text.length > 5);
       console.log('[BestBuy] JSON API found ' + questions.length + ' questions after mapping');
       if (questions.length > 0) return questions;
@@ -175,42 +173,40 @@ async function scrapeWithApify(url, retailer) {
 
   // pageFunction: use fetch() inside the browser to call the API
   // This uses Apify residential IPs which bypass BestBuy/Amazon IP blocks
-  const pageFn = `async function pageFunction({ page, request, log }) {
-    log.info('Fetching Q&A API: ' + request.url);
+  // web-scraper context: jQuery, response, request, log (NO page object)
+  const pageFn = `async function pageFunction(context) {
+    var request = context.request;
+    var log = context.log;
+    var $ = context.jQuery;
+    log.info('Fetching: ' + request.url);
     
-    const result = await page.evaluate(async (targetUrl) => {
-      try {
-        const res = await fetch(targetUrl, {
-          headers: {
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.bestbuy.com',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          }
-        });
-        const text = await res.text();
-        return { status: res.status, body: text };
-      } catch(e) {
-        return { status: 0, body: '', error: e.message };
-      }
-    }, targetUrl);
+    var bodyText = $('body').text() || $('pre').text() || '';
+    log.info('Body length: ' + bodyText.length);
     
-    log.info('Response status: ' + result.status);
-    if (result.status !== 200) return [];
+    if (!bodyText || bodyText.length < 10) {
+      log.warning('Empty body');
+      return [];
+    }
     
     try {
-      const data = JSON.parse(result.body);
-      const questions = data.questions || data.results || data.topics || [];
-      log.info('Questions found: ' + questions.length);
-      return questions.map(q => ({
-        question_text: q.questionText || q.question || q.text || '',
-        existing_answer: q.answers && q.answers[0] ? q.answers[0].answerText : null,
-        answer_status: q.answers && q.answers.length > 0 ? 'answered' : 'unanswered',
-        date_asked: q.submissionTime ? new Date(q.submissionTime).toISOString() : null,
-        customer_name: q.userNickname || null
-      })).filter(q => q.question_text && q.question_text.length > 5);
+      var data = JSON.parse(bodyText);
+      var arr = data.questions || data.results || data.topics || [];
+      log.info('Found ' + arr.length + ' items in JSON');
+      
+      return arr.filter(function(q) {
+        return (q.questionTitle || q.questionText || '').length > 5;
+      }).map(function(q) {
+        var answers = q.answersForQuestion || q.answers || [];
+        return {
+          question_text: q.questionTitle || q.questionText || q.question || '',
+          existing_answer: answers.length > 0 ? answers[0].answerText : null,
+          answer_status: answers.length > 0 ? 'answered' : 'unanswered',
+          date_asked: q.submissionTime || null,
+          customer_name: q.userNickname || null
+        };
+      });
     } catch(e) {
-      log.warning('JSON parse failed: ' + e.message);
+      log.warning('Parse error: ' + e.message);
       return [];
     }
   }`;
