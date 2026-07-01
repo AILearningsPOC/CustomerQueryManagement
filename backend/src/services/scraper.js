@@ -405,4 +405,4 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 
 module.exports = { scrapeAll, scrapeTarget: scrapeTargetItem };
-// BUILD: v2.5.20260628210502
+// BUILD: v2.6.20260701123727

@@ -532,6 +532,7 @@ let currentRole = 'admin';
 let scrapingConfig = { auto_enabled: true, engine: 'apify', interval_minutes: 10 };
 let dashCharts = {};
 let reviewPage = 1, answerPage = 1;
+let agentsCache = []; // populated on first agent load
 // Filter state persistence
 let filterState = {
   rq: { retailer: '', category: '', sentiment: '' },
@@ -818,9 +819,78 @@ async function loadDashboard() {
       </div>
       <div class="welcome-actions">
         <button class="btn btn-white btn-sm" onclick="scrapeNow()">⚡ Scrape Now</button>
-        <button class="btn btn-white btn-sm" onclick="showTab('review-queue')">🔍 Review Queue ${s.review>0?`<span style="background:var(--danger);border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">${s.review}</span>`:''}</button>
+        <button class="btn btn-white btn-sm" onclick="showTab('review-queue')">🔍 Review Queue ${s.review>0?'<span style="background:var(--danger);border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px">'+s.review+'</span>':''}</button>
       </div>
     </div>
+
+    ${(currentRole==='admin'||currentRole==='manager')?`
+    <div class="filters" style="margin-bottom:20px;background:var(--bg-secondary);padding:12px 16px;border-radius:10px">
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">Filter Dashboard:</span>
+      <select class="form-select" id="dash-vendor" onchange="loadDashboard()" style="width:160px">
+        <option value="">All Vendors</option>
+        <option value="bestbuy">BestBuy</option>
+        <option value="amazon">Amazon</option>
+        <option value="target">Target</option>
+      </select>
+      <input type="date" class="form-select" id="dash-from" onchange="loadDashboard()" style="width:145px">
+      <input type="date" class="form-select" id="dash-to" onchange="loadDashboard()" style="width:145px">
+      <button class="btn btn-secondary btn-sm" onclick="clearDashFilters()">✕ Clear</button>
+    </div>
+
+    <div class="stat-grid" style="margin-bottom:20px">
+      <div class="stat-card primary">
+        <div class="stat-icon">📊</div>
+        <div class="stat-value">${(s.total||0).toLocaleString()}</div>
+        <div class="stat-label">Total Q&amp;A</div>
+        <div class="stat-sub">All time</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-icon">📅</div>
+        <div class="stat-value">${Math.round((s.total||0)/Math.max(1,s.active_days||30)).toLocaleString()}</div>
+        <div class="stat-label">Q&amp;A per Day</div>
+        <div class="stat-sub">Average daily volume</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-icon">⏱️</div>
+        <div class="stat-value">2.00</div>
+        <div class="stat-label">AHT (mins)</div>
+        <div class="stat-sub">Avg handling time</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-icon">📉</div>
+        <div class="stat-value">${s.automation_rate||0}%</div>
+        <div class="stat-label">Reduction in AHT</div>
+        <div class="stat-sub">vs manual baseline</div>
+      </div>
+    </div>
+    <div class="stat-grid" style="margin-bottom:24px">
+      <div class="stat-card success">
+        <div class="stat-icon">👤</div>
+        <div class="stat-value">${Math.round((s.answered||0)*2/60).toLocaleString()}</div>
+        <div class="stat-label">Human Hours Saved</div>
+        <div class="stat-sub">Based on answered Q&amp;A</div>
+      </div>
+      <div class="stat-card primary">
+        <div class="stat-icon">💰</div>
+        <div class="stat-value">$${Math.round((s.answered||0)*2/60*15).toLocaleString()}</div>
+        <div class="stat-label">$ Savings</div>
+        <div class="stat-sub">At $15/hr baseline</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-icon">👥</div>
+        <div class="stat-value">${((s.answered||0)*2/60/160).toFixed(2)}</div>
+        <div class="stat-label">FTE Savings</div>
+        <div class="stat-sub">Full time equivalent</div>
+      </div>
+      <div class="stat-card ${(s.automation_rate||0)>=70?'success':'warning'}">
+        <div class="stat-icon">🚀</div>
+        <div class="stat-value">${s.automation_rate||0}%</div>
+        <div class="stat-label">Reduction in TAT</div>
+        <div class="stat-sub">Turn around time</div>
+      </div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin-bottom:20px">
+    `:''}
 
     <div class="stat-grid">
       <div class="stat-card primary">
@@ -878,6 +948,12 @@ async function loadDashboard() {
   } catch (e) {
     el.innerHTML = emptyState('📊', 'Dashboard unavailable', `Could not load stats: ${e.message}`, 'Check Configuration', "showTab('config')");
   }
+}
+
+
+function clearDashFilters() {
+  ['dash-vendor','dash-from','dash-to'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  loadDashboard();
 }
 
 function skeletonDashboard() {
@@ -942,11 +1018,23 @@ async function loadScrapeTargets() {
     <h1>Scrape Targets</h1>
     <p>Manage product URLs for BestBuy and Amazon scraping. Upload an Excel file to add products.</p>
   </div>
-  <div class="section-header" style="margin-bottom:16px">
-    <div></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
+    <div class="filters" style="margin:0">
+      <input class="form-input" id="st-search" placeholder="🔍 Search targets..." oninput="filterTargets()" style="width:220px">
+      <select class="form-select" id="st-retailer" onchange="filterTargets()">
+        <option value="">All Retailers</option>
+        <option value="bestbuy">BestBuy</option>
+        <option value="amazon">Amazon</option>
+        <option value="target">Target</option>
+      </select>
+      <select class="form-select" id="st-status" onchange="filterTargets()">
+        <option value="">All Status</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+      </select>
+    </div>
     <div class="flex gap-2">
       <a href="${API}/scrape-targets/template" class="btn btn-secondary btn-sm">⬇️ Download Template</a>
-      <span style="font-size:11px;color:var(--text-muted);align-self:center">Supports: BestBuy · Amazon · Target</span>
       <button class="btn btn-primary btn-sm" onclick="showUploadForm()">⬆️ Upload Excel</button>
     </div>
   </div>
@@ -1011,8 +1099,8 @@ async function refreshTargets() {
         <th>Retailer</th><th>Product</th><th>URL</th><th>Status</th>
         <th>Last Scraped</th><th>Questions Found</th><th>Active</th><th>Actions</th>
       </tr></thead>
-      <tbody>${targets.map(t=>`
-        <tr>
+      <tbody id="targets-table-body">${targets.map(t=>`
+        <tr data-retailer="${t.retailer}" data-active="${t.is_active}">
           <td><span class="badge-pill ${t.retailer==='bestbuy'?'badge-blue':'badge-orange'}">🏪 ${t.retailer}</span></td>
           <td><div class="truncate" style="max-width:200px;font-weight:500">${t.product_name}</div></td>
           <td><button onclick="openRetailerUrl(this.dataset.url)" data-url="${t.url}" style="background:none;border:none;color:var(--primary);font-size:12px;cursor:pointer;padding:0;text-decoration:underline">↗ View</button></td>
@@ -1022,7 +1110,7 @@ async function refreshTargets() {
           <td><label class="toggle-switch"><input type="checkbox" ${t.is_active?'checked':''} onchange="toggleTarget('${t.id}',this.checked)"><span class="toggle-slider"></span></label></td>
           <td><div class="flex gap-2">
             <button class="btn btn-secondary btn-xs" onclick="scrapeTarget('${t.id}')">⚡ Now</button>
-            <button class="btn btn-danger btn-xs" onclick="deleteTarget('${t.id}')">🗑</button>
+            <button class="btn btn-danger btn-xs" onclick="deleteTarget('${t.id}')">🗑️</button>
           </div></td>
         </tr>`).join('')}
       </tbody>
@@ -1061,27 +1149,79 @@ async function scrapeTarget(id) {
 async function loadReviewQueue(page = 1) {
   reviewPage = page;
   const el = document.getElementById('tab-review-queue');
-  el.innerHTML = `
-  <div class="page-header">
-    <div class="breadcrumb">🏠<span>/</span>Review Queue</div>
-    <h1>Review Queue</h1>
-    <p>Questions requiring human review — low confidence or non-English responses.</p>
-  </div>
-  <div class="filters">
-    <select class="form-select" id="rq-retailer" onchange="loadReviewQueue(1)">
-      <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option><option value="target">Target</option>
-    </select>
-    <select class="form-select" id="rq-category" onchange="loadReviewQueue(1)">
-      <option value="">All Categories</option>
-      ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
-    </select>
-    <select class="form-select" id="rq-sentiment" onchange="loadReviewQueue(1)">
-      <option value="">All Sentiments</option><option value="positive">Positive</option><option value="neutral">Neutral</option><option value="negative">Negative</option>
-    </select>
-  </div>
-  <div class="card" id="review-table-card"><div class="loading">⏳ Loading...</div></div>`;
+
+  // Read existing filter values BEFORE any rebuild to prevent reset
+  const prev = filterState.rq || {};
+  const curRetailer  = document.getElementById('rq-retailer')?.value  ?? prev.retailer  ?? '';
+  const curCategory  = document.getElementById('rq-category')?.value  ?? prev.category  ?? '';
+  const curSentiment = document.getElementById('rq-sentiment')?.value ?? prev.sentiment ?? '';
+  const curDateFrom  = document.getElementById('rq-date-from')?.value ?? prev.date_from ?? '';
+  const curDateTo    = document.getElementById('rq-date-to')?.value   ?? prev.date_to   ?? '';
+  filterState.rq = { retailer: curRetailer, category: curCategory, sentiment: curSentiment, date_from: curDateFrom, date_to: curDateTo };
+
+  // Build shell only once
+  if (!document.getElementById('review-table-card')) {
+    el.innerHTML = `
+    <div class="page-header">
+      <div class="breadcrumb">🏠<span>/</span>Review Queue</div>
+      <h1>Review Queue</h1>
+      <p>Questions requiring human review — low confidence or non-English responses.</p>
+    </div>
+    <div class="filters">
+      <select class="form-select" id="rq-retailer" onchange="applyRQFilters()">
+        <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option><option value="target">Target</option>
+      </select>
+      <select class="form-select" id="rq-category" onchange="applyRQFilters()">
+        <option value="">All Categories</option>
+        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>'<option value="'+c+'">'+c+'</option>').join('')}
+      </select>
+      <select class="form-select" id="rq-sentiment" onchange="applyRQFilters()">
+        <option value="">All Sentiments</option><option value="positive">Positive</option><option value="neutral">Neutral</option><option value="negative">Negative</option>
+      </select>
+      <input type="date" class="form-select" id="rq-date-from" onchange="applyRQFilters()" style="width:140px">
+      <input type="date" class="form-select" id="rq-date-to" onchange="applyRQFilters()" style="width:140px">
+      <button class="btn btn-secondary btn-sm" onclick="clearRQFilters()">✕ Clear</button>
+    </div>
+    <div class="card" id="review-table-card"><div class="loading">⏳ Loading...</div></div>`;
+  }
+
+  // Restore filter values (prevents reset on table refresh)
+  const setVal = (id, val) => { const e = document.getElementById(id); if (e && val) e.value = val; };
+  setVal('rq-retailer', curRetailer); setVal('rq-category', curCategory);
+  setVal('rq-sentiment', curSentiment); setVal('rq-date-from', curDateFrom); setVal('rq-date-to', curDateTo);
+
   await refreshReviewQueue();
 }
+
+function agentOptions(selectedVal) {
+  let opts = '<option value="">Reassign to...</option>';
+  if (agentsCache.length > 0) {
+    agentsCache.forEach(a => { opts += '<option value="'+a.name+'"'+(a.name===selectedVal?' selected':'')+'>'+a.name+' ('+a.role+')</option>'; });
+  } else {
+    opts += '<option value="Alex Agent">Alex Agent</option><option value="Jamie Agent">Jamie Agent</option><option value="Sarah Manager">Sarah Manager</option>';
+  }
+  return opts;
+}
+
+function applyRQFilters() {
+  filterState.rq = {
+    retailer:  document.getElementById('rq-retailer')?.value  || '',
+    category:  document.getElementById('rq-category')?.value  || '',
+    sentiment: document.getElementById('rq-sentiment')?.value || '',
+    date_from: document.getElementById('rq-date-from')?.value || '',
+    date_to:   document.getElementById('rq-date-to')?.value   || '',
+  };
+  reviewPage = 1;
+  refreshReviewQueue();
+}
+
+function clearRQFilters() {
+  filterState.rq = {};
+  ['rq-retailer','rq-category','rq-sentiment','rq-date-from','rq-date-to'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  reviewPage = 1;
+  refreshReviewQueue();
+}
+
 
 async function refreshReviewQueue() {
   const card = document.getElementById('review-table-card');
@@ -1092,11 +1232,15 @@ async function refreshReviewQueue() {
     const sentiment = filterState.rq.sentiment || '';
     const agentFilter = getAgentFilter();
 
+    const dateFrom  = filterState.rq?.date_from || '';
+    const dateTo    = filterState.rq?.date_to   || '';
     const params = new URLSearchParams({ status: 'review', page: reviewPage, limit: 15 });
     if (retailer)    params.append('retailer', retailer);
     if (category)    params.append('category', category);
     if (sentiment)   params.append('sentiment', sentiment);
     if (agentFilter) params.append('assigned_to', agentFilter);
+    if (dateFrom)    params.append('date_from', dateFrom);
+    if (dateTo)      params.append('date_to', dateTo);
     const url = '/questions?' + params.toString();
 
     const { data, total } = await apiFetch(url);
@@ -1145,15 +1289,12 @@ async function refreshReviewQueue() {
                 </div>
               </div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <button class="btn btn-secondary btn-sm" onclick="saveDraft('${q.id}')">💾 Save Draft</button>
+                <button class="btn btn-secondary btn-sm" onclick="saveDraft('${q.id}')" title="Save edited answer without approving — return later to approve">💾 Save Draft</button>
                 <button class="btn btn-success btn-sm" onclick="approveQuestion('${q.id}',false)">✓ Approve</button>
                 <button class="btn btn-primary btn-sm" onclick="approveQuestion('${q.id}',true)">✓✓ Approve + Add to KB</button>
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
                   <select class="form-select" id="assign-${q.id}" style="width:auto;padding:6px 10px;font-size:12px">
-                    <option value="">Reassign to...</option>
-                    <option value="Alex Agent">Alex Agent</option>
-                    <option value="Jamie Agent">Jamie Agent</option>
-                    <option value="Sarah Manager">Sarah Manager</option>
+                    ${agentOptions("")}
                   </select>
                   <button class="btn btn-secondary btn-sm" onclick="reassign('${q.id}')">🔄 Reassign</button>
                 </div>
@@ -1201,10 +1342,7 @@ function buildReviewActions(id) {
   if (isAdmin || isManager) {
     html += '<div style="margin-left:auto;display:flex;gap:8px;align-items:center">';
     html += `<select class="form-select" id="assign-${id}" style="width:auto;padding:6px 10px;font-size:12px">`;
-    html += '<option value="">Reassign to...</option>';
-    html += '<option value="Alex Agent">Alex Agent</option>';
-    html += '<option value="Jamie Agent">Jamie Agent</option>';
-    html += '<option value="Sarah Manager">Sarah Manager</option>';
+    html += agentOptions('');
     html += '</select>';
     html += `<button class="btn btn-secondary btn-sm" onclick="reassign('${id}')">↻ Reassign</button>`;
     html += '</div>';
@@ -1266,13 +1404,16 @@ async function loadAnswerQueue(page = 1) {
   </div>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
     <div class="filters" style="margin:0">
-      <select class="form-select" id="aq-retailer" onchange="loadAnswerQueue(1)">
+      <select class="form-select" id="aq-retailer" onchange="applyAQFilters()">
         <option value="">All Retailers</option><option value="bestbuy">BestBuy</option><option value="amazon">Amazon</option><option value="target">Target</option>
       </select>
-      <select class="form-select" id="aq-category" onchange="loadAnswerQueue(1)">
+      <select class="form-select" id="aq-category" onchange="applyAQFilters()">
         <option value="">All Categories</option>
-        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
+        ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>'<option value="'+c+'">'+c+'</option>').join('')}
       </select>
+      <input type="date" class="form-select" id="aq-date-from" onchange="applyAQFilters()" style="width:140px">
+      <input type="date" class="form-select" id="aq-date-to" onchange="applyAQFilters()" style="width:140px">
+      <button class="btn btn-secondary btn-sm" onclick="clearAQFilters()">✕ Clear</button>
     </div>
     <a href="${API}/questions/export/csv" class="btn btn-secondary btn-sm">⬇️ Export</a>
   </div>
@@ -1280,15 +1421,54 @@ async function loadAnswerQueue(page = 1) {
   await refreshAnswerQueue();
 }
 
+function filterTargets() {
+  const search   = (document.getElementById('st-search')?.value || '').toLowerCase();
+  const retailer = document.getElementById('st-retailer')?.value || '';
+  const status   = document.getElementById('st-status')?.value || '';
+  const rows = document.querySelectorAll('#targets-table tbody tr');
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    const rowRetailer = row.dataset.retailer || '';
+    const rowActive   = row.dataset.active || '';
+    const matchSearch   = !search   || text.includes(search);
+    const matchRetailer = !retailer || rowRetailer === retailer;
+    const matchStatus   = !status   || (status==='active' ? rowActive==='true' : rowActive==='false');
+    row.style.display = (matchSearch && matchRetailer && matchStatus) ? '' : 'none';
+  });
+}
+
+function applyAQFilters() {
+  filterState.aq = {
+    retailer:  document.getElementById('aq-retailer')?.value  || '',
+    category:  document.getElementById('aq-category')?.value  || '',
+    date_from: document.getElementById('aq-date-from')?.value || '',
+    date_to:   document.getElementById('aq-date-to')?.value   || '',
+  };
+  answerPage = 1;
+  refreshAnswerQueue();
+}
+
+function clearAQFilters() {
+  filterState.aq = {};
+  ['aq-retailer','aq-category','aq-date-from','aq-date-to'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  answerPage = 1;
+  refreshAnswerQueue();
+}
+
+
 async function refreshAnswerQueue() {
   const card = document.getElementById('answer-table-card');
   if (!card) return;
   try {
-    const retailer = filterState.aq.retailer || '';
-    const category = filterState.aq.category || '';
+    const retailer  = filterState.aq?.retailer  || '';
+    const category  = filterState.aq?.category  || '';
+    const dateFrom  = filterState.aq?.date_from || '';
+    const dateTo    = filterState.aq?.date_to   || '';
     const params = new URLSearchParams({ status: 'answered', page: answerPage, limit: 20 });
-    if (retailer) params.append('retailer', retailer);
-    if (category) params.append('category', category);
+    if (retailer)  params.append('retailer', retailer);
+    if (category)  params.append('category', category);
+    if (dateFrom)  params.append('date_from', dateFrom);
+    if (dateTo)    params.append('date_to', dateTo);
     const url = '/questions?' + params.toString();
 
     const { data, total } = await apiFetch(url);
@@ -1297,12 +1477,16 @@ async function refreshAnswerQueue() {
     card.innerHTML = `
     <div class="table-wrap"><table>
       <thead><tr>
-        <th>Date / Customer</th><th>Date Answered</th><th>Retailer</th><th>Question</th>
+        <th>Date / Customer</th><th>Retailer</th><th>Question &amp; Answer</th>
         <th>Category</th><th>Sentiment</th><th>Confidence</th><th>Assigned To</th>
       </tr></thead>
       <tbody>${data.map(q=>`
         <tr>
-          <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${q.date_asked?new Date(q.date_asked).toLocaleDateString():'—'}</td>
+          <td style="white-space:nowrap;font-size:12px">
+            <div style="color:var(--text-secondary)">${q.date_asked?new Date(q.date_asked).toLocaleDateString():'—'}</div>
+            <div style="color:var(--text-muted);font-size:11px">${q.customer_name||'Anonymous'}</div>
+            <div style="color:var(--text-muted);font-size:11px;margin-top:2px">${q.date_answered?new Date(q.date_answered).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):'—'}</div>
+          </td>
           <td style="white-space:nowrap;font-size:12px;color:var(--text-muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
           <td>${retailerBadge(q.retailer)}${q.product_url ? '<div style="margin-top:3px"><a href="'+q.product_url+'" target="_blank" rel="noreferrer noopener" style="font-size:10px;color:var(--primary)">↗ Product</a></div>' : ''}</td>
           <td><div class="truncate" style="font-weight:500">${q.question_text}</div>
@@ -1356,19 +1540,19 @@ async function renderKBList(page = 1) {
     <div class="filters" style="margin:0">
       <div style="position:relative">
         
-        <input class="form-input" id="kb-search" placeholder="Search knowledge base..." oninput="renderKBList(1)" style="padding-left:30px;width:240px;padding-top:7px;padding-bottom:7px">
+        <input class="form-input" id="kb-search" placeholder="Search knowledge base..." oninput="refreshKBList(1)" style="padding-left:30px;width:240px;padding-top:7px;padding-bottom:7px">
       </div>
-      <select class="form-select" id="kb-cat" onchange="renderKBList(1)">
+      <select class="form-select" id="kb-cat" onchange="refreshKBList(1)">
         <option value="">All Categories</option>
         ${['product_info','pricing','warranty','compatibility','usage','complaints','returns','other'].map(c=>`<option value="${c}">${c}</option>`).join('')}
       </select>
-      <select class="form-select" id="kb-src" onchange="renderKBList(1)">
+      <select class="form-select" id="kb-src" onchange="refreshKBList(1)">
         <option value="">All Sources</option>
         <option value="manual">Manual</option><option value="pdf_manual">PDF Manual</option>
         <option value="approved_answer">Approved Answer</option><option value="product_spec">Product Spec</option>
       </select>
     </div>
-    <button class="btn btn-secondary btn-sm" onclick="backfillEmbeddings()">🔄 Backfill Embeddings</button>
+    <button class="btn btn-secondary btn-sm" onclick="backfillEmbeddings()">🔄 Rebuild KB Search Index</button>
   </div>
   <div class="card" id="kb-table-card"><div class="loading">⏳ Loading...</div></div>`;
   await refreshKBList(page);
@@ -1400,7 +1584,7 @@ async function refreshKBList(page = 1) {
           <td style="font-size:12px;color:var(--text-muted)">${e.created_at?new Date(e.created_at).toLocaleDateString():'—'}</td>
           <td><div class="flex gap-2">
             ${e.has_pdf&&e.pdf_filename?`<button class="btn btn-secondary btn-xs" onclick="previewPDF('${e.pdf_filename}',null)">👁 PDF</button>`:''}
-            <button class="btn btn-danger btn-xs" onclick="deleteKB('${e.id}')">🗑</button>
+            <button class="btn btn-danger btn-xs" onclick="deleteKB('${e.id}')">🗑️</button>
           </div></td>
         </tr>`).join('')}
       </tbody>
@@ -1462,7 +1646,7 @@ async function renderKBDocs() {
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button class="btn btn-secondary btn-xs" onclick="previewPDF('${doc.filename}', '${doc.pdf_url||''}')">👁 Preview</button>
               ${doc.pdf_url ? `<a href="${doc.pdf_url}" target="_blank" rel="noreferrer noopener" class="btn btn-secondary btn-xs">⬇️ Download</a>` : ''}
-              <button class="btn btn-danger btn-xs" onclick="deleteDocAndChunks('${doc.filename}')">🗑 Delete</button>
+              <button class="btn btn-danger btn-xs" onclick="deleteDocAndChunks('${doc.filename}')">🗑️ Delete</button>
             </div>
           </div>
         </div>
@@ -1639,6 +1823,7 @@ async function renderAgentManage() {
   const el = document.getElementById('ag-manage-section');
   try {
     const agents = await apiFetch('/agents');
+    if (Array.isArray(agents)) agentsCache = agents;
     el.innerHTML = `
     <div style="display:flex;justify-content:flex-end;margin-bottom:16px">
       <button class="btn btn-primary btn-sm" onclick="showAddAgentForm()">+ Add Agent</button>
@@ -1657,7 +1842,10 @@ async function renderAgentManage() {
           <td style="font-size:11px;color:var(--text-muted)">${(a.skills||[]).join(', ')||'—'}</td>
           <td style="font-size:11px;color:var(--text-muted)">${(a.retailer_ids||[]).join(', ')||'all'}</td>
           <td><span class="badge-pill ${a.is_active?'badge-green':'badge-gray'}">${a.is_active?'Active':'Inactive'}</span></td>
-          <td><button class="btn btn-danger btn-xs" onclick="deleteAgent('${a.id}')">🗑</button></td>
+          <td style="display:flex;gap:6px">
+            <button class="btn btn-secondary btn-xs" onclick="showEditAgentForm('${a.id}','${a.name}','${a.role}','${(a.skills||[]).join(',')}','${(a.retailers||[]).join(',')}')" title="Edit agent">✏️</button>
+            <button class="btn btn-danger btn-xs" onclick="deleteAgent('${a.id}')" title="Delete agent">🗑️</button>
+          </td>
         </tr>`).join('')}
       </tbody>
     </table></div></div>`;
@@ -1696,6 +1884,56 @@ async function createAgent() {
     await renderAgentManage();
   } catch(e) { const msg = e.message.includes('duplicate') ? 'An agent with this name already exists.' : 'Failed to create agent: ' + e.message;
     toast(msg, 'error'); }
+}
+
+
+function showEditAgentForm(id, name, role, skills, retailers) {
+  const form = document.getElementById('add-agent-form');
+  if (!form) return;
+  form.innerHTML = `
+  <div class="card" style="margin-bottom:16px;background:var(--bg-secondary)">
+    <h4 style="margin-bottom:12px">✏️ Edit Agent: ${name}</h4>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <label class="form-label">Name</label>
+        <input class="form-input" id="edit-name" value="${name}">
+      </div>
+      <div>
+        <label class="form-label">Role</label>
+        <select class="form-select" id="edit-role">
+          <option value="agent" ${role==='agent'?'selected':''}>Agent</option>
+          <option value="manager" ${role==='manager'?'selected':''}>Manager</option>
+          <option value="admin" ${role==='admin'?'selected':''}>Admin</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Skills (comma-separated)</label>
+        <input class="form-input" id="edit-skills" value="${skills}" placeholder="product_info,warranty">
+      </div>
+      <div>
+        <label class="form-label">Retailers (comma-separated)</label>
+        <input class="form-input" id="edit-retailers" value="${retailers}" placeholder="bestbuy,amazon">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary btn-sm" onclick="updateAgent('${id}')">💾 Save Changes</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('add-agent-form').innerHTML=''">Cancel</button>
+    </div>
+  </div>`;
+}
+
+async function updateAgent(id) {
+  const name     = document.getElementById('edit-name')?.value?.trim();
+  const role     = document.getElementById('edit-role')?.value;
+  const skills   = (document.getElementById('edit-skills')?.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const retailers = (document.getElementById('edit-retailers')?.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if (!name) return toast('Name is required','error');
+  try {
+    await apiFetch('/agents/'+id, { method:'PATCH', body: JSON.stringify({ name, role, skills, retailers }) });
+    toast('Agent updated','success');
+    document.getElementById('add-agent-form').innerHTML = '';
+    renderAgentManage();
+  } catch(e) { toast('Update failed: '+e.message,'error'); }
 }
 
 async function deleteAgent(id) {
@@ -1791,7 +2029,10 @@ async function refreshPostQueue() {
       <thead><tr><th>Question</th><th>Retailer</th><th>Date Answered</th><th>Posted</th><th>Action</th></tr></thead>
       <tbody>${data.map(q=>`
         <tr>
-          <td class="truncate" style="max-width:260px;font-weight:500">${q.question_text}</td>
+          <td style="max-width:300px">
+            <div style="font-weight:500;font-size:13px;margin-bottom:4px">${q.question_text}</div>
+            ${q.ai_answer?'<div style="font-size:11px;color:var(--text-muted);line-height:1.4;border-left:2px solid var(--success);padding-left:6px">'+q.ai_answer.substring(0,120)+(q.ai_answer.length>120?'...':'')+'</div>':''}
+          </td>
           <td>${retailerBadge(q.retailer)}</td>
           <td style="font-size:12px;color:var(--text-muted)">${q.date_answered?new Date(q.date_answered).toLocaleDateString():'—'}</td>
           <td>${q.posted_to_retailer?'<span class="badge-pill badge-green">✓ Posted</span>':'<span class="badge-pill badge-gray">Not Posted</span>'}</td>
@@ -1963,6 +2204,6 @@ function pagination(total, page, limit, fn) {
 }
 </script>
 
-<!-- BUILD: v2.5.20260628210502 -->
+<!-- BUILD: v2.6.20260701123727 -->
 </body>
 </html>
