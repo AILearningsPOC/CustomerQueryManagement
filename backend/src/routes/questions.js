@@ -4,7 +4,7 @@ const supabase = require('../utils/supabase');
 
 router.get('/', async (req, res) => {
   try {
-    const { status, retailer, category, sentiment, assigned_to, page = 1, limit = 20 } = req.query;
+    const { status, retailer, category, sentiment, assigned_to, date_from, date_to, page = 1, limit = 20 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     let query = supabase.from('questions').select('*', { count: 'exact' });
     if (status)      query = query.eq('status', status);
@@ -12,6 +12,8 @@ router.get('/', async (req, res) => {
     if (category)    query = query.eq('category', category);
     if (sentiment)   query = query.eq('sentiment', sentiment);
     if (assigned_to) query = query.eq('assigned_to', assigned_to);
+    if (date_from)   query = query.gte('date_asked', date_from);
+    if (date_to)     query = query.lte('date_asked', date_to + 'T23:59:59');
     const { data, error, count } = await query.order('created_at', { ascending: false }).range(offset, offset + parseInt(limit) - 1);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ data: data || [], total: count || 0, page: parseInt(page), limit: parseInt(limit) });
@@ -79,4 +81,4 @@ router.patch('/:id/draft', async (req, res) => {
 });
 
 module.exports = router;
-// BUILD: v2.6.20260701123727
+// BUILD: v2.7.20260701134031

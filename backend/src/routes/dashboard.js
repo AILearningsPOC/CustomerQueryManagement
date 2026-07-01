@@ -4,6 +4,16 @@ const supabase = require('../utils/supabase');
 
 router.get('/stats', async (req, res) => {
   try {
+    const { date_from, date_to, vendor } = req.query;
+
+    // Helper to apply optional filters to any query
+    const applyFilters = (q) => {
+      if (vendor)    q = q.eq('retailer', vendor);
+      if (date_from) q = q.gte('created_at', date_from);
+      if (date_to)   q = q.lte('created_at', date_to + 'T23:59:59');
+      return q;
+    };
+
     const [
       { count: total },
       { count: answered },
@@ -16,15 +26,15 @@ router.get('/stats', async (req, res) => {
       { data: sla_breached_data },
       { count: kb_entries }
     ] = await Promise.all([
-      supabase.from('questions').select('*', { count: 'exact', head: true }),
-      supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'answered'),
-      supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'review'),
-      supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'answered').not('confidence', 'is', null).gte('confidence', 70),
-      supabase.from('questions').select('retailer').neq('retailer', null),
-      supabase.from('questions').select('category').neq('category', null),
-      supabase.from('questions').select('sentiment').neq('sentiment', null),
-      supabase.from('questions').select('id,created_at,assigned_to').in('status', ['pending', 'review']).lt('created_at', new Date(Date.now() - 86400000).toISOString()),
+      applyFilters(supabase.from('questions').select('*', { count: 'exact', head: true })),
+      applyFilters(supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'answered')),
+      applyFilters(supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'pending')),
+      applyFilters(supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'review')),
+      applyFilters(supabase.from('questions').select('*', { count: 'exact', head: true }).eq('status', 'answered').not('confidence', 'is', null).gte('confidence', 70)),
+      applyFilters(supabase.from('questions').select('retailer').neq('retailer', null)),
+      applyFilters(supabase.from('questions').select('category').neq('category', null)),
+      applyFilters(supabase.from('questions').select('sentiment').neq('sentiment', null)),
+      applyFilters(supabase.from('questions')).select('id,created_at,assigned_to').in('status', ['pending', 'review']).lt('created_at', new Date(Date.now() - 86400000).toISOString()),
       supabase.from('knowledge_base').select('*', { count: 'exact', head: true })
     ]);
 
@@ -87,4 +97,4 @@ router.get('/stats', async (req, res) => {
 
 module.exports = router;
 // CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.6.20260701123727
+// BUILD: v2.7.20260701134031
