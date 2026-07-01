@@ -1389,17 +1389,48 @@ async function loadAnswerQueue(page = 1) {
 }
 
 function buildDateBtn(prefix) {
-  var id = prefix + '-datemenu';
+  var id  = prefix + '-datemenu';
   var lid = prefix + '-datelbl';
-  var ranges = [['','All time'],['today','Today'],['7d','Last 7 days'],['30d','Last 30 days'],['month','This month'],['last_month','Last month']];
+  var ranges = [
+    {v:'',          l:'All time'},
+    {v:'today',     l:'Today'},
+    {v:'7d',        l:'Last 7 days'},
+    {v:'30d',       l:'Last 30 days'},
+    {v:'month',     l:'This month'},
+    {v:'last_month',l:'Last month'}
+  ];
+  // Use data-prefix and data-val attributes — avoids ALL quote escaping issues
   var items = ranges.map(function(r) {
-    return '<a style="display:block;padding:10px 16px;cursor:pointer" onclick="pickDR(\x22' + prefix + '\x22,\x22' + r[0] + '\x22,\x22' + r[1] + '\x22)">' + r[1] + '</a>';
+    return '<a class="dr-item" data-prefix="' + prefix + '" data-val="' + r.v + '" data-lbl="' + r.l + '" style="display:block;padding:10px 16px;cursor:pointer" onclick="drPick(this)">' + r.l + '</a>';
   }).join('');
   return '<div style="position:relative">' +
-    '<button class="date-range-btn" id="' + prefix + '-datebtn" onclick="toggleDR(\x22' + id + '\x22)" type="button">' +
+    '<button class="date-range-btn" id="' + prefix + '-datebtn" data-menu="' + id + '" onclick="drToggle(this)" type="button">' +
     '📅 <span id="' + lid + '">All time</span> ▾</button>' +
     '<div class="date-range-menu" id="' + id + '">' + items + '</div>' +
     '</div>';
+}
+
+function drToggle(btn) {
+  var menu = document.getElementById(btn.dataset.menu);
+  if (!menu) return;
+  menu.classList.toggle('open');
+  if (menu.classList.contains('open')) {
+    setTimeout(function() {
+      document.addEventListener('click', function handler(e) {
+        if (!menu.parentElement.contains(e.target)) {
+          menu.classList.remove('open');
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 10);
+  }
+}
+
+function drPick(el) {
+  var prefix = el.dataset.prefix;
+  var val    = el.dataset.val;
+  var lbl    = el.dataset.lbl;
+  pickDR(prefix, val, lbl);
 }
 
 function toggleDR(id) {
@@ -2217,6 +2248,6 @@ function pagination(total, page, limit, fn) {
 }
 </script>
 
-<!-- BUILD: v2.7.20260701141131 -->
+<!-- BUILD: v2.7.20260701171649 -->
 </body>
 </html>
