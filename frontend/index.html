@@ -867,11 +867,11 @@ async function loadDashboard() {
         <div class="stat-value">${Math.round((s.total||0)/Math.max(1,30)).toLocaleString()}</div>
         <div class="stat-label">Q&amp;A per Day</div><div class="stat-sub">30-day average</div></div>
       <div class="stat-card info"><div class="stat-icon">⏱️</div>
-        <div class="stat-value">2.00</div>
+        <div class="stat-value">${s.aht_mins||'—'}</div>
         <div class="stat-label">AHT (mins)</div><div class="stat-sub">Avg handling time</div></div>
       <div class="stat-card warning"><div class="stat-icon">📉</div>
-        <div class="stat-value">${s.automation_rate||0}%</div>
-        <div class="stat-label">Reduction in AHT</div><div class="stat-sub">vs manual baseline</div></div>
+        <div class="stat-value">${s.aht_reduction||s.automation_rate||0}%</div>
+        <div class="stat-label">Reduction in AHT</div><div class="stat-sub">Auto-approved vs total</div></div>
     </div>
     <div class="stat-grid" style="margin-bottom:24px">
       <div class="stat-card success"><div class="stat-icon">👤</div>
@@ -944,7 +944,20 @@ async function loadDashboard() {
 
     renderCharts(s);
     const ddw = document.getElementById('dash-date-wrap');
-    if (ddw && !document.getElementById('dash-datebtn')) ddw.innerHTML = buildDateBtn('dash');
+    if (ddw && !document.getElementById('dash-datebtn')) {
+      ddw.innerHTML = buildDateBtn('dash');
+      // Restore label if a range was already selected
+      if (dashDateRange) {
+        const ranges = [{v:'today',l:'Today'},{v:'7d',l:'Last 7 days'},{v:'30d',l:'Last 30 days'},{v:'month',l:'This month'},{v:'last_month',l:'Last month'}];
+        const found = ranges.find(function(r) { return r.v === dashDateRange; });
+        if (found) {
+          const lbl = document.getElementById('dash-datelbl'); if (lbl) lbl.textContent = found.l;
+          const btn = document.getElementById('dash-datebtn'); if (btn) btn.classList.add('active');
+          const menu = document.getElementById('dash-datemenu');
+          if (menu) menu.querySelectorAll('a').forEach(function(a) { a.classList.toggle('selected', a.dataset.val === dashDateRange); });
+        }
+      }
+    }
   } catch (e) {
     el.innerHTML = emptyState('📊', 'Dashboard unavailable', `Could not load stats: ${e.message}`, 'Check Configuration', "showTab('config')");
   }
@@ -1175,6 +1188,16 @@ async function loadReviewQueue(page = 1) {
     </div>
     <div class="card" id="review-table-card"><div class="loading">Loading...</div></div>`;
     document.getElementById('rq-date-wrap').innerHTML = buildDateBtn('rq');
+    if (rqDateRange) {
+      const ranges = [{v:'today',l:'Today'},{v:'7d',l:'Last 7 days'},{v:'30d',l:'Last 30 days'},{v:'month',l:'This month'},{v:'last_month',l:'Last month'}];
+      const found = ranges.find(function(r) { return r.v === rqDateRange; });
+      if (found) {
+        const lbl = document.getElementById('rq-datelbl'); if (lbl) lbl.textContent = found.l;
+        const btn = document.getElementById('rq-datebtn'); if (btn) btn.classList.add('active');
+        const menu = document.getElementById('rq-datemenu');
+        if (menu) menu.querySelectorAll('a').forEach(function(a) { a.classList.toggle('selected', a.dataset.val === rqDateRange); });
+      }
+    }
   }
   const retEl = document.getElementById('rq-retailer'); if (retEl && curR) retEl.value = curR;
   const catEl = document.getElementById('rq-category'); if (catEl && curC) catEl.value = curC;
@@ -1396,7 +1419,19 @@ async function loadAnswerQueue(page = 1) {
     <a href="${API}/questions/export/csv" class="btn btn-secondary btn-sm">⬇️ Export</a>
   </div>
   <div class="card" id="answer-table-card"><div class="loading">⏳ Loading...</div></div>`;
-  if (document.getElementById('aq-date-wrap') && !document.getElementById('aq-datebtn')) { document.getElementById('aq-date-wrap').innerHTML = buildDateBtn('aq'); }
+  if (document.getElementById('aq-date-wrap') && !document.getElementById('aq-datebtn')) {
+    document.getElementById('aq-date-wrap').innerHTML = buildDateBtn('aq');
+    if (aqDateRange) {
+      const ranges = [{v:'today',l:'Today'},{v:'7d',l:'Last 7 days'},{v:'30d',l:'Last 30 days'},{v:'month',l:'This month'},{v:'last_month',l:'Last month'}];
+      const found = ranges.find(function(r) { return r.v === aqDateRange; });
+      if (found) {
+        const lbl = document.getElementById('aq-datelbl'); if (lbl) lbl.textContent = found.l;
+        const btn = document.getElementById('aq-datebtn'); if (btn) btn.classList.add('active');
+        const menu = document.getElementById('aq-datemenu');
+        if (menu) menu.querySelectorAll('a').forEach(function(a) { a.classList.toggle('selected', a.dataset.val === aqDateRange); });
+      }
+    }
+  }
   await refreshAnswerQueue();
 }
 
@@ -2260,6 +2295,6 @@ function pagination(total, page, limit, fn) {
 }
 </script>
 
-<!-- BUILD: v2.7.20260702124239 -->
+<!-- BUILD: v2.7.20260702131218 -->
 </body>
 </html>

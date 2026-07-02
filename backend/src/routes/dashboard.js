@@ -59,6 +59,27 @@ router.get('/stats', async (req, res) => {
     const automation_rate = total > 0 ? Math.round((auto_approved / total) * 100) : 0;
     const sla_count = sla_breached_data?.length || 0;
 
+    // AHT calculation — avg minutes from created_at to date_answered
+    let aht_mins = null;
+    try {
+      const { data: aht_data } = await applyFilters(
+        supabase.from('questions')
+          .select('created_at, date_answered')
+          .eq('status', 'answered')
+          .not('date_answered', 'is', null)
+          .not('created_at', 'is', null)
+          .limit(200)
+      );
+      if (aht_data && aht_data.length > 0) {
+        const diffs = aht_data
+          .map(q => (new Date(q.date_answered) - new Date(q.created_at)) / 60000)
+          .filter(d => d > 0 && d < 10080); // ignore negatives and > 1 week
+        if (diffs.length > 0) {
+          aht_mins = (diffs.reduce((a, b) => a + b, 0) / diffs.length).toFixed(2);
+        }
+      }
+    } catch (e) { console.error('[dashboard] AHT calc failed:', e.message); }
+
     // Last 7 days trend
     const { data: trend_data } = await supabase
       .from('questions')
@@ -76,6 +97,8 @@ router.get('/stats', async (req, res) => {
       if (q.status === 'answered') daily[day].answered++;
     });
 
+    const aht_reduction = total > 0 ? Math.round((auto_approved / total) * 100) : 0;
+
     res.json({
       total: total || 0,
       answered: answered || 0,
@@ -83,6 +106,8 @@ router.get('/stats', async (req, res) => {
       review: review || 0,
       auto_approved: auto_approved || 0,
       automation_rate,
+      aht_mins: aht_mins,
+      aht_reduction: aht_reduction,
       sla_breached: sla_count,
       kb_entries: kb_entries || 0,
       by_retailer: retailer_counts,
@@ -97,4 +122,4 @@ router.get('/stats', async (req, res) => {
 
 module.exports = router;
 // CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.7.20260702124239
+// BUILD: v2.7.20260702131218
