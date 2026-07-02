@@ -34,7 +34,7 @@ router.get('/stats', async (req, res) => {
       applyFilters(supabase.from('questions').select('retailer').neq('retailer', null)),
       applyFilters(supabase.from('questions').select('category').neq('category', null)),
       applyFilters(supabase.from('questions').select('sentiment').neq('sentiment', null)),
-      applyFilters(supabase.from('questions')).select('id,created_at,assigned_to').in('status', ['pending', 'review']).lt('created_at', new Date(Date.now() - 86400000).toISOString()),
+      applyFilters(supabase.from('questions').select('id,created_at,assigned_to').in('status', ['pending', 'review']).lt('created_at', new Date(Date.now() - 86400000).toISOString())),
       supabase.from('knowledge_base').select('*', { count: 'exact', head: true })
     ]);
 
@@ -97,4 +97,4 @@ router.get('/stats', async (req, res) => {
 
 module.exports = router;
 // CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.7.20260701134031
+// BUILD: v2.7.20260701172712
