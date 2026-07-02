@@ -227,4 +227,4 @@ router.post('/backfill-embeddings', async (req, res) => {
 });
 
 module.exports = router;
-// BUILD: v2.7.20260701172712
+// BUILD: v2.7.20260702124239

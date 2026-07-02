@@ -342,11 +342,14 @@ tbody tr:hover td { background: var(--primary-light); }
 .date-range-btn { position:relative; display:inline-flex; align-items:center; gap:6px; cursor:pointer; background:var(--bg-card); border:1px solid var(--border); border-radius:8px; padding:7px 14px; font-size:13px; font-weight:500; color:var(--text-primary); white-space:nowrap; transition:all .15s; }
 .date-range-btn:hover { border-color:var(--primary); color:var(--primary); }
 .date-range-btn.active { background:var(--primary); color:#fff; border-color:var(--primary); }
-.date-range-menu { position:absolute; top:calc(100% + 6px); left:0; background:var(--bg-card); border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,.12); min-width:160px; z-index:999; overflow:hidden; display:none; }
+.date-range-menu { position:absolute; top:calc(100% + 6px); left:0; background:#fff; border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,.18); min-width:170px; z-index:9999; overflow:hidden; display:none; }
 .date-range-menu.open { display:block; }
-.date-range-menu a { display:block; padding:10px 16px; font-size:13px; color:var(--text-primary); cursor:pointer; transition:background .1s; }
-.date-range-menu a:hover { background:var(--bg-hover); }
-.date-range-menu a.selected { color:var(--primary); font-weight:600; }
+.date-range-menu a, .date-range-menu .dr-item { display:block; padding:10px 16px; font-size:13px; color:#1a1a2e; background:#fff; cursor:pointer; transition:background .1s; text-decoration:none; border:none; }
+.date-range-menu a:hover, .date-range-menu .dr-item:hover { background:#f0f4ff; }
+.date-range-menu a.selected, .date-range-menu .dr-item.selected { color:var(--primary); font-weight:600; background:#f0f4ff; }
+[data-theme="dark"] .date-range-menu { background:#1e2030; }
+[data-theme="dark"] .date-range-menu a, [data-theme="dark"] .date-range-menu .dr-item { background:#1e2030; color:#e0e0e0; }
+[data-theme="dark"] .date-range-menu a:hover, [data-theme="dark"] .date-range-menu .dr-item:hover { background:#2a2d45; }
 
 /* ── MISC ────────────────────────────────────────────────────────── */
 .flex { display: flex; }
@@ -384,6 +387,9 @@ tbody tr:hover td { background: var(--primary-light); }
   .scraping-controls { gap: 4px; }
   .engine-toggle { display: none; }
 }
+
+#review-table td { padding: 8px 8px; font-size: 12px; vertical-align: middle; }
+#review-table th { padding: 8px 8px; }
 </style>
 </head>
 <body>
@@ -1221,18 +1227,24 @@ async function refreshReviewQueue() {
     }
 
     card.innerHTML = `
-    <div class="table-wrap"><table id="review-table">
+    <div class="table-wrap"><table id="review-table" style="table-layout:fixed;width:100%;font-size:12px">
       <thead><tr>
-        <th>Date Asked</th><th>Retailer</th><th>Question</th>
-        <th>Category</th><th>Sentiment</th><th>Confidence</th>
-        <th>Assigned To</th><th>Reason</th><th>Actions</th>
+        <th style="width:85px;font-size:11px">Date</th>
+        <th style="width:95px;font-size:11px">Retailer</th>
+        <th style="font-size:11px">Question</th>
+        <th style="width:95px;font-size:11px">Category</th>
+        <th style="width:75px;font-size:11px">Sentiment</th>
+        <th style="width:85px;font-size:11px">Confidence</th>
+        <th style="width:95px;font-size:11px">Assigned To</th>
+        <th style="width:110px;font-size:11px">Reason</th>
+        <th style="width:80px;font-size:11px">Actions</th>
       </tr></thead>
       <tbody>
       ${data.map(q=>`
         <tr id="row-${q.id}">
           <td style="white-space:nowrap;color:var(--text-muted);font-size:12px">${q.date_asked?new Date(q.date_asked).toLocaleDateString():new Date(q.created_at).toLocaleDateString()}</td>
           <td>${retailerBadge(q.retailer)}</td>
-          <td><div class="truncate" style="max-width:240px">${q.question_text}</div></td>
+          <td style="max-width:0"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${q.question_text}</div></td>
           <td>${catBadge(q.category)}</td>
           <td>${sentBadge(q.sentiment)}</td>
           <td>${confidenceBadge(q.confidence)}</td>
@@ -2248,6 +2260,6 @@ function pagination(total, page, limit, fn) {
 }
 </script>
 
-<!-- BUILD: v2.7.20260701172712 -->
+<!-- BUILD: v2.7.20260702124239 -->
 </body>
 </html>
