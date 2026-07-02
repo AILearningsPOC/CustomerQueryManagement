@@ -9,8 +9,8 @@ router.get('/stats', async (req, res) => {
     // Helper to apply optional filters to any query
     const applyFilters = (q) => {
       if (vendor)    q = q.eq('retailer', vendor);
-      if (date_from) q = q.gte('created_at', date_from);
-      if (date_to)   q = q.lte('created_at', date_to + 'T23:59:59');
+      if (date_from) q = q.gte('date_asked', date_from);
+      if (date_to)   q = q.lte('date_asked', date_to + 'T23:59:59');
       return q;
     };
 
@@ -99,6 +99,14 @@ router.get('/stats', async (req, res) => {
 
     const aht_reduction = total > 0 ? Math.round((auto_approved / total) * 100) : 0;
 
+    // Calculate the number of days in the selected period
+    let active_days = 30;
+    if (date_from && date_to) {
+      active_days = Math.max(1, Math.round((new Date(date_to) - new Date(date_from)) / 86400000));
+    } else if (date_from) {
+      active_days = Math.max(1, Math.round((new Date() - new Date(date_from)) / 86400000));
+    }
+
     res.json({
       total: total || 0,
       answered: answered || 0,
@@ -108,6 +116,7 @@ router.get('/stats', async (req, res) => {
       automation_rate,
       aht_mins: aht_mins,
       aht_reduction: aht_reduction,
+      active_days: active_days,
       sla_breached: sla_count,
       kb_entries: kb_entries || 0,
       by_retailer: retailer_counts,
@@ -122,4 +131,4 @@ router.get('/stats', async (req, res) => {
 
 module.exports = router;
 // CQM v2.0 - 2026-06-25 - Build: final
-// BUILD: v2.7.20260702131218
+// BUILD: v2.7.20260702133304

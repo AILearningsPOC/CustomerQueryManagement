@@ -862,12 +862,14 @@ async function loadDashboard() {
     <div class="stat-grid" style="margin-bottom:20px">
       <div class="stat-card primary"><div class="stat-icon">📊</div>
         <div class="stat-value">${(s.total||0).toLocaleString()}</div>
-        <div class="stat-label">Total Q&amp;A</div><div class="stat-sub">All time</div></div>
+        <div class="stat-label">Total Q&amp;A</div>
+        <div class="stat-sub">${document.getElementById('dash-datelbl')?.textContent||'All time'}</div></div>
       <div class="stat-card success"><div class="stat-icon">📅</div>
-        <div class="stat-value">${Math.round((s.total||0)/Math.max(1,30)).toLocaleString()}</div>
-        <div class="stat-label">Q&amp;A per Day</div><div class="stat-sub">30-day average</div></div>
+        <div class="stat-value">${s.total > 0 ? Math.round((s.total||0)/Math.max(1, s.active_days||30)).toLocaleString() : 0}</div>
+        <div class="stat-label">Q&amp;A per Day</div>
+        <div class="stat-sub">${(s.active_days||30)}-day period</div></div>
       <div class="stat-card info"><div class="stat-icon">⏱️</div>
-        <div class="stat-value">${s.aht_mins||'—'}</div>
+        <div class="stat-value">${s.aht_mins ? s.aht_mins+' min' : (s.answered>0 ? '...' : 'N/A')}</div>
         <div class="stat-label">AHT (mins)</div><div class="stat-sub">Avg handling time</div></div>
       <div class="stat-card warning"><div class="stat-icon">📉</div>
         <div class="stat-value">${s.aht_reduction||s.automation_rate||0}%</div>
@@ -2295,6 +2297,6 @@ function pagination(total, page, limit, fn) {
 }
 </script>
 
-<!-- BUILD: v2.7.20260702131218 -->
+<!-- BUILD: v2.7.20260702133304 -->
 </body>
 </html>

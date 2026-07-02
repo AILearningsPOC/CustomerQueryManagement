@@ -50,4 +50,4 @@ async function generateRagAnswer(question, kbContext, productInfo) {
 }
 
 module.exports = { callGroq, enrichQuestion, generateRagAnswer };
-// BUILD: v2.7.20260702131218
+// BUILD: v2.7.20260702133304
